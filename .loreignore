@@ -1,0 +1,12 @@
+.DS_Store
+.vscode
+dist/
+*.egg-info/
+**/__pycache__/
+.venv
+.pytest_cache/
+build/
+lore/
+!lore/__init__.py
+uv.lock
+LoreRepositories/

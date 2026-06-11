@@ -1,0 +1,142 @@
+"""
+Copyright Epic Games, Inc. All Rights Reserved
+This file is generated, do not modify it here, it may be overwritten
+"""
+
+# pylint: disable=missing-function-docstring, missing-class-docstring, dangerous-default-value
+# pyright: reportAttributeAccessIssue=false
+
+from dataclasses import dataclass, field
+from __future__ import annotations
+from .. import _loreffi
+from .enums import LoreMetadataType
+from . import LoreHash, LoreString, LoreContext, LoreBranchId, LoreRepositoryId, LorePartition, LoreStore{% for arr in array_types %}, {{ arr.array_class }}{% endfor %}{% for sw in args_used_struct_types %}, {{ pascal_case(sw.removesuffix("_t")) }}{% endfor %}
+
+{% import "utils.ji" as utils %}
+
+{#
+Generate blittable types for Args types, this are the types that we need to ultimately generate in order to make a call to lorelib.
+
+For instance, for the `struct lore_auth_user_info_args_t`
+
+    typedef struct lore_auth_user_info_args_t {
+    // Path to the repository
+    struct lore_string_t repository_path;
+    // An array of user ids
+    struct lore_string_array_t ids;
+    } lore_auth_user_info_args_t;
+
+the result is:
+
+    @dataclass
+    class LoreAuthUserInfoArgs:
+        _repository_path: LoreString = field(default_factory=LoreString)
+        _ids: LoreStringArray = field(default_factory=LoreStringArray)
+
+        def __init__(
+            self,
+            repository_path: str = "",
+            ids: list[str] = list(),
+        ):
+            self.cdata = _loreffi.new("lore_auth_user_info_args_t*")
+            self.repository_path = repository_path
+            self.ids = ids
+
+        @property
+        def repository_path(self) -> str:
+            return LoreString.to_native(self._repository_path.as_ptr())
+
+        @repository_path.setter
+        def repository_path(self, value: str):
+            self._repository_path = LoreString(value)
+            self.cdata.repository_path = self._repository_path.as_value()
+
+        @property
+        def ids(self) -> list[str]:
+            return LoreStringArray.to_native(self._ids.as_ptr())
+
+        @ids.setter
+        def ids(self, value: list[str]):
+            self._ids = LoreStringArray(value)
+            self.cdata.ids = self._ids.as_value()
+
+        def as_value(self):
+            return self.cdata[0]
+
+        def as_ptr(self):
+            return self.cdata
+#}
+{% for struct_name, struct_fields in symbols.args.items() %}
+    {% set class_name = pascal_case(struct_name.removesuffix("_t")) %}
+@dataclass
+class {{ class_name }}:
+    {% for field in struct_fields %}
+        {% set field_type = field.0 %}
+        {% set field_name = field.1 %}
+        {% set field_array_size = field.2 %}
+        {% if field_type in blit_types or field_type in from_ffi_struct_types %}
+    _{{ field_name }}: {{ pascal_case(field_type.removesuffix("_t")) }} = field(default_factory={{ pascal_case(field_type.removesuffix("_t")) }})
+        {% endif %}
+    {% endfor %}
+
+    def __init__(self,
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            {{ field_name }}: {{ py_map[field_type] }} = {{ init_map[py_map[field_type]]}},
+        {% endfor %}
+        ):
+            """
+            Args:
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            {% if field.3 %}
+                {{ field_name }} ({{ py_map[field_type] }}): {{ " ".join(field.3) }}
+            {% endif %}
+        {% endfor %}
+            """
+            self.cdata = _loreffi.new("{{ struct_name }}*")
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            self.{{ field_name }} = {{ field_name }}
+        {% endfor %}
+
+    {% for field in struct_fields %}
+        {% set field_type = field.0 %}
+        {% set field_name = field.1 %}
+    @property
+    def {{ field_name }}(self) -> {{ py_map[field_type] }}:
+        {% if field.3 %}
+        """{{ "\n        ".join(field.3) }}
+        """
+        {% endif %}
+        {% if field_type in blit_types %}
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self._{{ field_name }}.as_ptr())
+        {% elif field_type in from_ffi_struct_types %}
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.from_ffi(self.cdata.{{ field_name }})
+        {% else %}
+        return self.cdata.{{ field_name }}
+        {% endif %}
+
+    @{{ field_name }}.setter
+    def {{ field_name }}(self, value: {{ py_map[field_type] }}):
+        {% if field_type in blit_types %}
+        self._{{ field_name }} = {{ pascal_case(field_type.removesuffix("_t")) }}(value)
+        self.cdata.{{ field_name }} = self._{{ field_name }}.as_value()
+        {% elif field_type in from_ffi_struct_types %}
+        self._{{ field_name }} = value
+        self.cdata.{{ field_name }} = value.as_value()
+        {% else %}
+        self.cdata.{{ field_name }} = value
+        {% endif %}
+    {% endfor %}
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+{% endfor %}

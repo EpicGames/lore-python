@@ -1,0 +1,616 @@
+"""
+Copyright Epic Games, Inc. All Rights Reserved
+This file is generated, do not modify it here, it may be overwritten
+"""
+
+# pylint: disable=missing-function-docstring, missing-class-docstring
+# pyright: reportAttributeAccessIssue=false, reportReturnType=false
+
+from __future__ import annotations
+import logging
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+from .. import _loreffi
+from .enums import (
+{% for enum_c_type in symbols.enums.keys() %}    {{ pascal_case(enum_c_type.removesuffix("_t")) }},
+{% endfor %})
+if TYPE_CHECKING:
+    from cffi import CData
+from typing import Callable
+
+_log = logging.getLogger(__name__)
+
+{% import "utils.ji" as utils %}
+
+{#
+
+Generate blittable types for foundational types, this are the types that we need to ultimately generate in order to make a call to lorelib.
+
+For instance, for the `struct lore_string_t`
+
+    typedef struct lore_string_t {
+        const char *string;
+        uintptr_t length;
+    } lore_string_t;
+
+the result is:
+
+    class LoreString:
+        def __init__(self, input_: str):
+            input_encoded = input_.encode("utf-8")
+            self.cdata_buffer = _loreffi.new("char[]", input_encoded)
+            self.cdata = _loreffi.new("lore_string_t*")
+            self.cdata.string = self.cdata_buffer
+            self.cdata.length = len(input_encoded)
+
+        // ...
+
+        @staticmethod
+        def to_native(cdata) -> str:
+            buffer = _loreffi.buffer(cdata.string, cdata.length)
+            return bytes(buffer).decode("utf-8")
+
+#}
+@dataclass
+class LoreHash:
+    _size = 32
+
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata = _loreffi.new("lore_hash_t*")
+        if len(input_) > self._size:
+            _log.warning(
+                "Input length (%d) bigger than expected (%d). Truncating.",
+                len(input_), self._size,
+            )
+            _loreffi.buffer(self.cdata.data)[:] = input_[:self._size]
+
+        if len(input_) < self._size:
+            _log.debug(
+                "Input length (%d) smaller than expected (%d). Padding with default.",
+                len(input_), self._size,
+            )
+
+        _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
+
+    @classmethod
+    def from_ffi(cls, lore_hash: "CData") -> LoreHash:
+        hash = cls.__new__(cls)
+        hash.cdata = lore_hash
+        return hash
+
+    @property
+    def data(self) -> bytes:
+        return bytes(_loreffi.buffer(self.cdata.data))
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+class LoreBinary:
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata_buffer = _loreffi.new("uint8_t[]", input_)
+        self.cdata = _loreffi.new("lore_binary_t*")
+        self.cdata.payload = self.cdata_buffer
+        self.cdata.length = len(input_)
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    @staticmethod
+    def to_native(cdata) -> bytes:
+        return bytes(_loreffi.buffer(cdata.payload, cdata.length))
+
+class LoreString:
+    def __init__(self, string: str = ""):
+        string_encoded = string.encode("utf-8")
+        self.string = _loreffi.new("char[]", string_encoded)
+
+        self.cdata = _loreffi.new("lore_string_t*")
+        self.cdata.string = self.string
+        self.cdata.length = len(string_encoded)
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    @staticmethod
+    def to_native(cdata) -> str:
+        buffer = _loreffi.buffer(cdata.string, cdata.length)
+        return bytes(buffer).decode("utf-8")
+
+@dataclass
+class LoreContext:
+    _size = 16
+
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata = _loreffi.new("lore_context_t*")
+        if len(input_) > self._size:
+            _log.warning(
+                "Input length (%d) bigger than expected (%d). Truncating.",
+                len(input_), self._size,
+            )
+            _loreffi.buffer(self.cdata.data)[:] = input_[:self._size]
+
+        if len(input_) < self._size:
+            _log.debug(
+                "Input length (%d) smaller than expected (%d). Padding with default.",
+                len(input_), self._size,
+            )
+
+        _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
+
+    @classmethod
+    def from_ffi(cls, lore_context: "CData") -> LoreContext:
+        context = cls.__new__(cls)
+        context.cdata = lore_context
+        return context
+
+    @property
+    def data(self) -> bytes:
+        return bytes(_loreffi.buffer(self.cdata.data))
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+@dataclass
+class LorePartition:
+    _size = 16
+
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata = _loreffi.new("lore_partition_t*")
+        if len(input_) > self._size:
+            _log.warning(
+                "Input length (%d) bigger than expected (%d). Truncating.",
+                len(input_), self._size,
+            )
+            _loreffi.buffer(self.cdata.data)[:] = input_[:self._size]
+
+        if len(input_) < self._size:
+            _log.debug(
+                "Input length (%d) smaller than expected (%d). Padding with default.",
+                len(input_), self._size,
+            )
+
+        _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
+
+    @classmethod
+    def from_ffi(cls, lore_partition: "CData") -> LorePartition:
+        partition = cls.__new__(cls)
+        partition.cdata = lore_partition
+        return partition
+
+    @property
+    def data(self) -> bytes:
+        return bytes(_loreffi.buffer(self.cdata.data))
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+@dataclass
+class LoreBranchId:
+    _size = 16
+
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata = _loreffi.new("lore_branch_id_t*")
+        if len(input_) > self._size:
+            _log.warning(
+                "Input length (%d) bigger than expected (%d). Truncating.",
+                len(input_), self._size,
+            )
+            _loreffi.buffer(self.cdata.data)[:] = input_[:self._size]
+
+        if len(input_) < self._size:
+            _log.debug(
+                "Input length (%d) smaller than expected (%d). Padding with default.",
+                len(input_), self._size,
+            )
+
+        _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
+
+    @classmethod
+    def from_ffi(cls, lore_branch_id: "CData") -> LoreBranchId:
+        branch_id = cls.__new__(cls)
+        branch_id.cdata = lore_branch_id
+        return branch_id
+
+    @property
+    def data(self) -> bytes:
+        return bytes(_loreffi.buffer(self.cdata.data))
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+@dataclass
+class LoreRepositoryId:
+    _size = 16
+
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata = _loreffi.new("lore_repository_id_t*")
+        if len(input_) > self._size:
+            _log.warning(
+                "Input length (%d) bigger than expected (%d). Truncating.",
+                len(input_), self._size,
+            )
+            _loreffi.buffer(self.cdata.data)[:] = input_[:self._size]
+
+        if len(input_) < self._size:
+            _log.debug(
+                "Input length (%d) smaller than expected (%d). Padding with default.",
+                len(input_), self._size,
+            )
+
+        _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
+
+    @classmethod
+    def from_ffi(cls, lore_repository_id: "CData") -> LoreRepositoryId:
+        repository_id = cls.__new__(cls)
+        repository_id.cdata = lore_repository_id
+        return repository_id
+
+    @property
+    def data(self) -> bytes:
+        return bytes(_loreffi.buffer(self.cdata.data))
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+class LoreHashArray:
+    def __init__(self, hashes: list[bytes] = list()):
+        self.hashes = [LoreHash(h) for h in hashes]
+
+        self.cdata = _loreffi.new("lore_hash_t[]", len(hashes))
+        for i, h in enumerate(hashes):
+            self.cdata[i] = self.hashes[i].as_value()
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    @staticmethod
+    def to_native(cdata) -> list[bytes]:
+        hashes = []
+        hashes.append(LoreHash.from_ffi(cdata[0]))
+        hashes.append(LoreHash.from_ffi(cdata[1]))
+        return hashes
+
+class LoreInstanceId:
+    _size = 16
+
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata = _loreffi.new("lore_instance_id_t*")
+        if len(input_) > self._size:
+            _log.warning(
+                "Input length (%d) bigger than expected (%d). Truncating.",
+                len(input_), self._size,
+            )
+            _loreffi.buffer(self.cdata.data)[:] = input_[:self._size]
+
+        if len(input_) < self._size:
+            _log.debug(
+                "Input length (%d) smaller than expected (%d). Padding with default.",
+                len(input_), self._size,
+            )
+
+        _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
+
+    @classmethod
+    def from_ffi(cls, lore_instance_id: "CData") -> LoreInstanceId:
+        instance_id = cls.__new__(cls)
+        instance_id.cdata = lore_instance_id
+        return instance_id
+
+    @property
+    def data(self) -> bytes:
+        return bytes(_loreffi.buffer(self.cdata.data))
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+class LoreBytes:
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata_buffer = _loreffi.new("uint8_t[]", input_)
+        self.cdata = _loreffi.new("lore_bytes_t*")
+        self.cdata.ptr = self.cdata_buffer
+        self.cdata.len = len(input_)
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    @staticmethod
+    def to_native(cdata) -> bytes:
+        return bytes(_loreffi.buffer(cdata.ptr, cdata.len))
+
+class LoreStore:
+    INVALID: "LoreStore"
+
+    def __init__(self, handle_id: int = 0):
+        self.cdata = _loreffi.new("lore_store_t*")
+        self.cdata.handle_id = handle_id
+
+    @classmethod
+    def from_ffi(cls, lore_store: "CData") -> LoreStore:
+        store = cls.__new__(cls)
+        store.cdata = lore_store
+        return store
+
+    @property
+    def handle_id(self) -> int:
+        return self.cdata.handle_id
+
+    @staticmethod
+    def to_native(cdata) -> int:
+        return cdata.handle_id
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+LoreStore.INVALID = LoreStore(handle_id=0)
+
+{% for arr in array_types %}
+class {{ arr.array_class }}:
+    def __init__(self, items: {{ arr.py_annotation }} = list()):
+    {% if arr.category == "primitive_int" or arr.category == "enum" %}
+        self._items = _loreffi.new("{{ arr.element_c_type }}[]", items)
+    {% elif arr.category == "primitive_bool" %}
+        self._items = _loreffi.new("uint8_t[]", [int(b) for b in items])
+    {% elif arr.category == "native_wrapper" %}
+        self._wrapped = [{{ arr.element_class }}(x) for x in items]
+        self._items = _loreffi.new("{{ arr.element_c_type }}[]", len(items))
+        for i, x in enumerate(self._wrapped):
+            self._items[i] = x.as_value()
+    {% else %}{# struct #}
+        self._items = _loreffi.new("{{ arr.element_c_type }}[]", len(items))
+        for i, item in enumerate(items):
+            self._items[i] = item.as_value()
+    {% endif %}
+        self.cdata = _loreffi.new("{{ arr.array_c_type }}*")
+        self.cdata.{{ arr.ptr_field }} = self._items
+        self.cdata.{{ arr.count_field }} = len(items)
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    @staticmethod
+    def to_native(cdata) -> {{ arr.py_annotation }}:
+    {% if arr.category == "primitive_int" or arr.category == "enum" %}
+        return list(_loreffi.unpack(cdata.{{ arr.ptr_field }}, cdata.{{ arr.count_field }}))
+    {% elif arr.category == "primitive_bool" %}
+        return [bool(v) for v in _loreffi.unpack(cdata.{{ arr.ptr_field }}, cdata.{{ arr.count_field }})]
+    {% elif arr.category == "native_wrapper" and arr.element_c_type == "lore_string_t" %}
+        result = []
+        for i in range(cdata.{{ arr.count_field }}):
+            buffer = _loreffi.buffer(cdata.{{ arr.ptr_field }}[i].string, cdata.{{ arr.ptr_field }}[i].length)
+            result.append(bytes(buffer).decode("utf-8"))
+        return result
+    {% elif arr.category == "native_wrapper" and arr.element_c_type == "lore_instance_id_t" %}
+        return [bytes(_loreffi.buffer(cdata.{{ arr.ptr_field }}[i].data)) for i in range(cdata.{{ arr.count_field }})]
+    {% else %}{# struct #}
+        return [{{ arr.element_class }}.from_ffi(cdata.{{ arr.ptr_field }}[i]) for i in range(cdata.{{ arr.count_field }})]
+    {% endif %}
+
+{% endfor %}
+
+@dataclass
+class LoreEventCallbackConfig:
+    user_context: int = 0
+    func: Callable[['LoreEventFFI', int], None] = lambda lore_event, user_context: None
+
+{% for struct_name, struct_fields in symbols.types.items() %}
+    {% if struct_name not in hardcoded_blit_types %}
+        {% set class_name = pascal_case(struct_name.removesuffix("_t")) %}
+@dataclass
+class {{ class_name }}:
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            {% set field_array_size = field.2 %}
+            {% if field_type in blit_types %}
+    _{{ field_name }}: {{ pascal_case(field_type.removesuffix("_t")) }} = field(default_factory={{ pascal_case(field_type.removesuffix("_t")) }})
+            {% endif %}
+        {% endfor %}
+
+    def __init__(self,
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            {{ field_name }}: {{ py_map[field_type] }} = {{ init_map[py_map[field_type]]}},
+        {% endfor %}
+        ):
+            """
+            Args:
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            {% if field.3 %}
+                {{ field_name }} ({{ py_map[field_type] }}): {{ " ".join(field.3) }}
+            {% endif %}
+        {% endfor %}
+            """
+            self.cdata = _loreffi.new("{{ struct_name }}*")
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            self.{{ field_name }} = {{ field_name }}
+        {% endfor %}
+
+    {% set input_param = struct_name.removesuffix("_t") %}
+    {% set return_value = input_param.removeprefix("lore_") %}
+    @classmethod
+    def from_ffi(cls, {{ input_param }}: "CData") -> {{ class_name }}:
+        {{ return_value }} = cls.__new__(cls)
+        {{ return_value }}.cdata = {{ input_param }}
+        return {{ return_value }}
+
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+
+            {% set prop_type = py_map[field_type] %}
+            {% if field_type in from_ffi_scalar_types or field_type in from_ffi_struct_types %}
+                {% set prop_type = pascal_case(field_type.removesuffix("_t")) %}
+            {% endif %}
+
+    @property
+    def {{ field_name }}(self) -> {{ prop_type }}:
+            {% if field.3 %}
+        """{{ "\n        ".join(field.3) }}
+        """
+            {% endif %}
+            {% if field_type in from_ffi_scalar_types or field_type in from_ffi_struct_types %}
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.from_ffi(self.cdata.{{ field_name }})
+            {% elif field_type in blit_types %}
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self.cdata.{{ field_name }})
+            {% else %}
+        return self.cdata.{{ field_name }}
+            {% endif %}
+
+    @{{ field_name }}.setter
+    def {{ field_name }}(self, value: {{ py_map[field_type] }}):
+            {% if field_type in from_ffi_struct_types %}
+        self._{{ field_name }} = value
+        self.cdata.{{ field_name }} = value.as_value()
+            {% elif field_type in blit_types %}
+        self._{{ field_name }} = {{ pascal_case(field_type.removesuffix("_t")) }}(value)
+        self.cdata.{{ field_name }} = self._{{ field_name }}.as_value()
+            {% else %}
+        self.cdata.{{ field_name }} = value
+            {% endif %}
+        {% endfor %}
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    def clone(self) -> {{ class_name }}:
+        return {{ class_name }}(
+        {% for field in struct_fields %}
+            {% set field_type = field.0 %}
+            {% set field_name = field.1 %}
+            {% if field_type in ["lore_hash_t", "lore_context_t", "lore_partition_t", "lore_branch_id_t", "lore_repository_id_t", "lore_instance_id_t"] %}
+                {{ field_name }} = self.{{ field_name }}.data,
+            {% elif field_type in ["lore_address_t", "lore_fragment_t"] %}
+                {{ field_name }} = self.{{ field_name }}.clone(),
+            {% elif field_type in blit_types %}
+                {{ field_name }} = {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self.cdata.{{ field_name }}),
+            {% else %}
+                {{ field_name }} = self.{{ field_name }},
+            {% endif %}
+        {% endfor %}
+        )
+
+    {% endif %}
+{% endfor %}
+
+@dataclass(init=False)
+class LoreMetadata:
+    cdata: "CData"
+
+    @classmethod
+    def from_ffi(cls, lore_metadata: "CData") -> LoreMetadata:
+        metadata = cls.__new__(cls)
+        metadata.cdata = lore_metadata
+        return metadata
+
+    @property
+    def tag(self) -> LoreMetadataTag:
+        return self.cdata.tag
+
+    @property
+    def address(self) -> LoreAddress:
+        return LoreAddress.from_ffi(self.cdata.address)
+
+    @property
+    def boolean(self) -> bool:
+        return bool(self.cdata.boolean)
+
+    @property
+    def binary(self) -> LoreBinary:
+        return LoreBinary.to_native(self.cdata.binary)
+
+    @property
+    def context(self) -> LoreContext:
+        return LoreContext.from_ffi(self.cdata.context)
+
+    @property
+    def hash(self) -> LoreHash:
+        return LoreHash.from_ffi(self.cdata.hash)
+
+    @property
+    def numeric(self) -> int:
+        return self.cdata.numeric
+
+    @property
+    def string(self) -> LoreString:
+        return LoreString.to_native(self.cdata.string)
+
+    def clone(self) -> LoreMetadata:
+        new_cdata = _loreffi.new("lore_metadata_t*")
+        new_cdata.tag = self.cdata.tag
+        tag = self.cdata.tag
+        refs = []
+        if tag == LoreMetadataTag.ADDRESS:
+            addr = LoreAddress(
+                hash=self.address.hash.data,
+                context=self.address.context.data,
+            )
+            new_cdata.address = addr.as_value()
+            refs.append(addr)
+        elif tag == LoreMetadataTag.BOOLEAN:
+            new_cdata.boolean = self.cdata.boolean
+        elif tag == LoreMetadataTag.BINARY:
+            binary = LoreBinary(LoreBinary.to_native(self.cdata.binary))
+            new_cdata.binary = binary.as_value()
+            refs.append(binary)
+        elif tag == LoreMetadataTag.CONTEXT:
+            ctx = LoreContext(bytes(_loreffi.buffer(self.cdata.context.data)))
+            new_cdata.context = ctx.as_value()
+            refs.append(ctx)
+        elif tag == LoreMetadataTag.HASH:
+            h = LoreHash(bytes(_loreffi.buffer(self.cdata.hash.data)))
+            new_cdata.hash = h.as_value()
+            refs.append(h)
+        elif tag == LoreMetadataTag.NUMERIC:
+            new_cdata.numeric = self.cdata.numeric
+        elif tag == LoreMetadataTag.STRING:
+            s = LoreString(LoreString.to_native(self.cdata.string))
+            new_cdata.string = s.as_value()
+            refs.append(s)
+        result = LoreMetadata.__new__(LoreMetadata)
+        result.cdata = new_cdata
+        result._refs = refs
+        return result

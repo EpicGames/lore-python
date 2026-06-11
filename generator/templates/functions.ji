@@ -1,0 +1,121 @@
+"""
+Copyright Epic Games, Inc. All Rights Reserved
+This file is generated, do not modify it here, it may be overwritten
+"""
+
+# pylint: disable=missing-function-docstring, relative-beyond-top-level
+# pyright: reportAttributeAccessIssue=false
+
+import threading
+import asyncio
+from . import _loreffi, _lore
+from .types import LoreLogConfig, LoreEventCallbackConfig
+from .types.events import LoreEventFFI
+from .types.enums import LoreEventTag
+from .types.args import (
+{% for struct_name, _ in symbols.args.items() %}
+    {% set type = pascal_case(struct_name.removesuffix("_t")) %}
+    {{ type }},
+{% endfor %}
+)
+
+{% import "utils.ji" as utils %}
+
+_handles = {}
+_handles_lock = threading.Lock()
+
+@_loreffi.callback("void(lore_event_t*, uint64_t)")
+def _internal_event_handler(lore_event, handle_id):
+    with _handles_lock:
+        if handle_id not in _handles:
+            raise RuntimeError("Unable to resolve callback")
+        (callback_handle, user_context, loop, future) = _handles[handle_id]
+
+    user_callback = _loreffi.from_handle(callback_handle)
+
+    lore_event_ffi = LoreEventFFI.from_ffi(lore_event)
+    user_callback(lore_event_ffi, user_context)
+
+    if lore_event.tag == LoreEventTag.COMPLETE and loop is not None and future is not None:
+        loop.call_soon_threadsafe(future.set_result, lore_event.complete.status)
+
+    if lore_event.tag == LoreEventTag.END:
+        with _handles_lock:
+            _handles.pop(handle_id, None)
+
+    lore_event_ffi._dispose()
+
+{% for function_name, function_args in symbols.functions.items() %}
+    {% if function_name not in uncommon_functions %}
+        {% if "async" not in function_name %}
+            {% set args_name = function_args.removesuffix("_t") %}
+def {{ function_name }} (
+    global_args: LoreGlobalArgs,
+    args: {{pascal_case(args_name)}},
+    callback: LoreEventCallbackConfig
+):
+            {% if function_name in symbols.functions_comments %}
+    """
+    {{ "\n    ".join(symbols.functions_comments[function_name]) }}
+    """
+            {% endif %}
+    callback_handle = _loreffi.new_handle(callback.func)
+    handle_id = int(_loreffi.cast("uintptr_t", callback_handle))
+
+    with _handles_lock:
+        if handle_id in _handles:
+            raise RuntimeError(f"Colliding handle id: {handle_id}")
+        _handles[handle_id] = (callback_handle, callback.user_context, None, None)
+
+    internal_callback = _loreffi.new("lore_event_callback_config_t*")
+    internal_callback.user_context = handle_id
+    internal_callback.func = _internal_event_handler
+    return _lore.{{ function_name }}(global_args.as_ptr(), args.as_ptr(), internal_callback[0])
+        {% else %}
+            {% set args_name = function_args.replace("_async", "").removesuffix("_t") %}
+def {{ function_name }}(
+    global_args: LoreGlobalArgs,
+    args: {{pascal_case(args_name)}},
+    callback: LoreEventCallbackConfig
+):
+            {% if function_name in symbols.functions_comments %}
+    """
+    {{ "\n    ".join(symbols.functions_comments[function_name]) }}
+    """
+            {% endif %}
+    loop = asyncio.get_running_loop()
+    future = loop.create_future();
+
+    callback_handle = _loreffi.new_handle(callback.func)
+    handle_id = int(_loreffi.cast("uintptr_t", callback_handle))
+
+    with _handles_lock:
+        if handle_id in _handles:
+            future.set_exception(RuntimeError(f"Colliding handle id: {handle_id}"))
+            return future
+        _handles[handle_id] = (callback_handle, callback.user_context, loop, future)
+
+    internal_callback = _loreffi.new("lore_event_callback_config_t*")
+    internal_callback.user_context = handle_id
+    internal_callback.func = _internal_event_handler
+
+    _lore.{{ function_name }}(global_args.as_ptr(), args.as_ptr(), internal_callback[0])
+
+    return future
+        {% endif %}
+    {% endif %}
+{% endfor %}
+
+def lore_set_thread_limit(count: int):
+    return _lore.lore_set_thread_limit(count)
+
+def lore_log_configure(config: LoreLogConfig):
+    return _lore.lore_log_configure(config.as_ptr())
+
+def lore_shutdown():
+    return _lore.lore_shutdown()
+
+def lore_version():
+    version_ptr = _lore.lore_version()
+    version_bytes = _loreffi.string(version_ptr)
+    return version_bytes.decode("utf-8")

@@ -1,0 +1,11 @@
+{#
+The type registries (py_map, init_map, dataclass_init_map, blit_types,
+hardcoded_blit_types, uncommon_functions) and the auto-detected
+`array_types` list are now built in Python and exposed as Jinja globals
+by `generator/common/registry.py`. They are accessed directly by name
+inside templates (no `utils.` prefix).
+
+This file only exists for legacy `{% import "utils.ji" as utils %}`
+statements; the imports are no-ops now and can be removed when the
+templates are touched.
+#}

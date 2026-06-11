@@ -1,0 +1,172 @@
+"""
+Copyright Epic Games, Inc. All Rights Reserved.
+"""
+
+import asyncio
+
+from typing import Callable
+from threading import Lock
+
+from .types.events import LoreEventFFI
+from .types.enums import LoreEventTag
+from .types import LoreEventCallbackConfig
+from .types.args import *
+from .native import *
+
+{% import "utils.ji" as utils %}
+
+class LoreExecutor:
+    def __init__(self, global_args, args, function, function_async):
+        self._global_args = global_args;
+        self._args = args;
+        self._function = function;
+        self._function_async = function_async;
+        self._callback = lambda lore_event, user_context: None
+        self._filter_tags = set()
+        self._collected_events = list()
+        self._queue = asyncio.Queue()
+        self._user_context = 0
+        self._terminated = False
+        self._event_loop = None
+
+    async def __aiter__(self):
+        while True:
+            lore_event = await self._queue.get()
+            if lore_event is None:
+                break
+            yield lore_event
+
+    def _wait_event_handler(self, lore_event: LoreEventFFI, user_context: int):
+        Lore._handle_event_subscriptions(lore_event, user_context)
+        if self._filter_tags and lore_event.tag not in self._filter_tags:
+            return
+        self._callback(lore_event, user_context)
+
+    def _collect_event_handler(self, lore_event: LoreEventFFI, user_context: int):
+        Lore._handle_event_subscriptions(lore_event, user_context)
+        if self._filter_tags and lore_event.tag not in self._filter_tags:
+            return
+        self._callback(lore_event, user_context)
+        event_cloned = lore_event.get_data().clone()
+        self._collected_events.append(event_cloned)
+
+    def _async_iter_event_handler(self, lore_event: LoreEventFFI, user_context: int):
+        if self._event_loop is None:
+            raise RuntimeError("There is no event loop currently running.")
+
+        Lore._handle_event_subscriptions(lore_event, user_context)
+        if self._filter_tags and lore_event.tag not in self._filter_tags:
+            if lore_event.tag == LoreEventTag.END:
+                self._event_loop.call_soon_threadsafe(self._queue.put_nowait, None)
+            return
+
+        self._callback(lore_event, user_context)
+        event_cloned = lore_event.get_data().clone()
+        self._event_loop.call_soon_threadsafe(self._queue.put_nowait, event_cloned)
+
+        if lore_event.tag == LoreEventTag.END:
+            self._event_loop.call_soon_threadsafe(self._queue.put_nowait, None)
+
+    def _verify_termination(self):
+        if self._terminated:
+            raise RuntimeError("Already started")
+
+    def callback(self, value: Callable[["LoreEventFFI", int], None]):
+        self._callback = value
+        return self
+
+    def filter_by_type(self, value: list[LoreEventTag]):
+        self._filter_tags = set(value)
+        return self
+
+    def user_context(self, value: int):
+        self._user_context = value
+        return self
+
+    def wait(self):
+        self._verify_termination()
+        self._terminated = True
+        callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._wait_event_handler)
+        return self._function(self._global_args, self._args, callback)
+
+    def wait_async(self):
+        self._verify_termination()
+        self._terminated = True
+        callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._wait_event_handler)
+        return self._function_async(self._global_args, self._args, callback)
+
+    def async_iter(self):
+        self._verify_termination()
+        self._terminated = True
+        self._event_loop = asyncio.get_running_loop()
+        callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._async_iter_event_handler)
+        self._function_async(self._global_args, self._args, callback);
+        return self
+
+    def collect(self):
+        self._verify_termination()
+        self._terminated = True
+        self._collected_events.clear();
+        callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._collect_event_handler)
+        self._function(self._global_args, self._args, callback)
+        return self._collected_events
+
+    async def collect_async(self):
+        self._verify_termination()
+        self._terminated = True
+        self._collected_events.clear();
+        callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._collect_event_handler)
+        result = await self._function_async(self._global_args, self._args, callback)
+        return self._collected_events
+
+class Lore:
+    _event_subscriptions_by_event_type = {}
+    _event_subscriptions_snapshots_by_event_type = {}
+    _event_subscriptions_lock = Lock()
+
+    {% for function_name, _ in symbols.functions.items() %}
+        {% if "async" not in function_name %}
+            {% set function_args = pascal_case(function_name) + "Args" %}
+            {% if function_name not in uncommon_functions %}
+    @staticmethod
+    def {{ function_name.removeprefix("lore_") }}(global_args: LoreGlobalArgs, args: {{ function_args }}) -> LoreExecutor:
+                {% if function_name in symbols.functions_comments %}
+        """
+        {{ "\n        ".join(symbols.functions_comments[function_name]) }}
+        """
+                {% endif %}
+        return LoreExecutor(global_args, args, {{ function_name }}, {{ function_name }}_async)
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+
+    @staticmethod
+    def set_thread_limit(count: int):
+        return lore_set_thread_limit(count)
+
+    @staticmethod
+    def log_configure(log_config: LoreLogConfig):
+        return lore_log_configure(log_config)
+
+    @staticmethod
+    def shutdown():
+        return lore_shutdown()
+
+    @staticmethod
+    def global_callback(event_type: LoreEventTag, callback: Callable[["LoreEventFFI", int], None]):
+        with Lore._event_subscriptions_lock:
+            if event_type not in Lore._event_subscriptions_by_event_type:
+                Lore._event_subscriptions_by_event_type[event_type] = set()
+            Lore._event_subscriptions_by_event_type[event_type].add(callback)
+            Lore._event_subscriptions_snapshots_by_event_type[event_type] = tuple(Lore._event_subscriptions_by_event_type[event_type])
+
+        def unsubscribe():
+            with Lore._event_subscriptions_lock:
+                Lore._event_subscriptions_by_event_type[event_type].discard(callback)
+                Lore._event_subscriptions_snapshots_by_event_type[event_type] = tuple(Lore._event_subscriptions_by_event_type[event_type])
+        return unsubscribe
+
+    @staticmethod
+    def _handle_event_subscriptions(lore_event: LoreEventFFI, user_context: int):
+        for callback in Lore._event_subscriptions_snapshots_by_event_type.get(lore_event.tag, ()):
+            callback(lore_event, user_context)

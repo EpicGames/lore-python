@@ -1,0 +1,39 @@
+"""
+Copyright Epic Games, Inc. All Rights Reserved
+This file is generated, do not modify it here, it may be overwritten
+"""
+
+# pylint: disable=missing-class-docstring
+# pyright: reportAttributeAccessIssue=false
+
+from enum import IntEnum
+from .. import _lore
+
+{#
+
+Creates a Python enum from the C enum
+
+For instance, for the `enum lore_branch_location_t`
+
+    typedef enum lore_branch_location_t {
+        LORE_BRANCH_LOCATION_LOCAL = 0,
+        LORE_BRANCH_LOCATION_REMOTE = 1,
+    } lore_branch_location_t;
+
+the result is:
+
+    class LoreBranchLocation(IntEnum):
+        LOCAL = _lore.LORE_BRANCH_LOCATION_LOCAL
+        REMOTE = _lore.LORE_BRANCH_LOCATION_REMOTE
+
+#}
+
+{% for enum_name, enum_values in symbols.enums.items() %}
+    {% set enum_name = enum_name.removesuffix("_t") %}
+    {% set value_prefix = enum_name.removesuffix("_tag") %}
+    {% set class_name = pascal_case(enum_name)%}
+class {{ class_name }}(IntEnum):
+    {% for value in enum_values %}
+        {{value}} = _lore.{{ value_prefix.upper() }}_{{ value }}
+    {% endfor %}
+{% endfor %}

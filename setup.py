@@ -62,12 +62,6 @@ def _py_version():
     if not LORE_REVISION:
         return f"{LORE_VERSION}+{LORE_NAME}" if LORE_NAME else f"{LORE_VERSION}"
 
-    # Nightly build. Composite builds (Epic/Urc primary + Epic/Lore overlay)
-    # carry two revisions: the sibling (Epic/Lore) revision goes in the PEP 440
-    # dev segment and the primary (URC) revision in the local (+) segment, so a
-    # change in either yields a distinct version and never overwrites a previous
-    # release. Open-source builds (Epic/Lore only) have no sibling and keep the
-    # single-revision form.
     if SIBLING_REVISION:
         dev = SIBLING_REVISION
         local_parts = [LORE_REVISION]

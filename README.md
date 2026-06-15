@@ -1,9 +1,10 @@
 # Lore Python SDK
 
 ## About
-This repository contains tools to exend Lore with Python. 
 
-Lore is an open source version control system that is designed for unprecedented scalability of both data and teams. It is optimized for projects that combine code with large binary assets, including games and entertainment, and caters for the needs of developers and artists alike. 
+This repository contains the Python SDK for integrating with Lore.
+
+Lore is an open source version control system that is designed for unprecedented scalability of both data and teams. It is optimized for projects that combine code with large binary assets, including games and entertainment, and caters to the needs of developers and artists alike.
 
 For full Lore documentation, architecture details, and contribution guidelines, visit the [main Lore repository](https://github.com/EpicGames/lore).
 
@@ -14,29 +15,6 @@ For full Lore documentation, architecture details, and contribution guidelines, 
 ```shell
 python3 -m pip install lore-vcs
 ```
-
-### Nightly Build
-
-Nightly builds are published to PyPI with a `.devN` suffix. By default `pip` skips pre-releases, so you need to either opt in with `--pre` or pin an exact version. To install the latest nightly:
-
-```shell
-python3 -m pip install --pre lore-vcs
-```
-
-To install a specific nightly, browse the [release history](https://pypi.org/project/lore-vcs/#history) and pin the exact version:
-
-```shell
-python3 -m pip install "lore-vcs==0.1.2.dev345"
-```
-
-To upgrade an existing install to the latest nightly:
-
-
-```shell
-python3 -m pip install --pre --upgrade lore-vcs
-```
-
-
 
 ## Minimal example
 
@@ -117,7 +95,7 @@ export LORE_BUILD_PATH="/<path-to>/lore/target/release"
 
 Use this when you only need to develop the Python SDK against an existing Lore version.
 
-1. Download the header and binaries from [Lore's repository](https://github.com/EpicGames/lore) release page and place them under `/<path-to>/lore/`
+1. Download the header and binaries from the [Lore repository](https://github.com/EpicGames/lore) release page and place them under `/<path-to>/lore/`
 
 2. Set the environment variable `LORE_BUILD_PATH` to point to the download path:
 
@@ -153,7 +131,7 @@ uv pip install -e .
 
 ### Run the examples
 
-With the dev environment set up, a Lore library available and the Python bindings generated, run an example as a module from the repository root:
+With the dev environment set up, a Lore library available, and the Python bindings generated, run an example as a module from the repository root:
 
 ```shell
 uv run python examples/example.py
@@ -173,27 +151,3 @@ uv run mypy lore
 ```
 
 `mypy` is configured in strict mode (see `[tool.mypy]` in [pyproject.toml](pyproject.toml)). Run it before opening a PR so type annotations on the public SDK surface stay correct for users.
-
-## Releasing
-
-Assumes the dev environment from [Contributing](#contributing) is set up, that is, the Lore library has been built or fetched and Python bindings regenerated against the version you're releasing.
-
-### Build the wheel
-
-The wheel version is computed from `LORE_VERSION` (and `LORE_REVISION` if set) — make sure they match what was used to generate the bindings.
-
-```shell
-uv build
-```
-
-The `.whl` lands in `dist/` with a platform-tagged filename (e.g. `lore_vcs-0.1.2.dev345-py3-none-macosx_11_0_arm64.whl`).
-
-### Publish to PyPI
-
-1. Get a PyPI API token from https://pypi.org/manage/account/token/ scoped to the `lore-vcs` project.
-
-2. Publish:
-
-```shell
-uv publish --token <pypi-token>
-```

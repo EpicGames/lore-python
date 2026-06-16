@@ -90,7 +90,6 @@ setup(
     version=_py_version(),
     license="MIT",
     author="Epic Games, Inc.",
-    classifiers=["Private :: Do Not Upload"],
     python_requires=">=3.10",
     install_requires=["cffi>=2.0.0"],
     packages=["lore", "lore.types", "lore.include", "lore.lib"],

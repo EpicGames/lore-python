@@ -16,6 +16,7 @@ LORE_REVISION = os.environ.get("LORE_REVISION")
 SIBLING_REVISION = os.environ.get("SIBLING_REVISION")
 LORE_NAME = os.environ.get("LORE_NAME")
 LORE_PACKAGE_NAME = os.environ.get("LORE_PACKAGE_NAME", "lore-vcs")
+LORE_MANYLINUX_TAG = os.environ.get("LORE_MANYLINUX_TAG", "manylinux_2_39")
 
 SYSTEM = platform.system().lower()
 MACHINE = platform.machine().lower().replace("x86_64", "amd64")
@@ -51,8 +52,11 @@ class LoreBdist(bdist_wheel):
     """Lore Bdist Tagging"""
 
     def get_tag(self):
-        """Makes the wheel compatible with Python 3.x"""
+        """py3/none ABI; relabel bare Linux tags to manylinux for PyPI."""
         _wheel_py, _wheel_py_abi, wheel_platform = super().get_tag()
+        if wheel_platform.startswith("linux_"):
+            arch = wheel_platform[len("linux_") :]
+            wheel_platform = f"{LORE_MANYLINUX_TAG}_{arch}"
         return ("py3", "none", wheel_platform)
 
 

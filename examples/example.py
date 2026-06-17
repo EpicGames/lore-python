@@ -7,6 +7,7 @@ Example showing how to execute basic workflow using Fluent API
 import sys
 import uuid
 
+from lore import Lore
 from lore.types import LoreLogConfig
 from lore.types.args import (
     LoreBranchPushArgs,
@@ -16,9 +17,8 @@ from lore.types.args import (
     LoreRepositoryCreateArgs,
     LoreRevisionCommitArgs,
 )
-from lore.types.enums import LoreLogLevel, LoreEventTag
+from lore.types.enums import LoreEventTag, LoreLogLevel
 from lore.types.events import LoreEventFFI
-from lore import Lore
 
 
 def logger(lore_event: LoreEventFFI, _user_context):
@@ -62,9 +62,7 @@ else:
 # Set up general configuration
 LOG_FILE_PATH = "./LoreRepositories"
 REPOSITORY_NAME = "EpicRepo" + str(uuid.uuid4())
-REPOSITORY_URL = (
-    f"{REMOTE_URL}/{REPOSITORY_NAME}" if ONLINE else REPOSITORY_NAME
-)
+REPOSITORY_URL = f"{REMOTE_URL}/{REPOSITORY_NAME}" if ONLINE else REPOSITORY_NAME
 REPOSITORY_PATH = f"./LoreRepositories/{REPOSITORY_NAME}"
 GLOBALS = LoreGlobalArgs(repository_path=REPOSITORY_PATH, offline=not ONLINE)
 LOG_CONFIG = LoreLogConfig(file=True, file_path=LOG_FILE_PATH)

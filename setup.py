@@ -18,6 +18,8 @@ LORE_NAME = os.environ.get("LORE_NAME")
 LORE_PACKAGE_NAME = os.environ.get("LORE_PACKAGE_NAME", "lore-vcs")
 LORE_MANYLINUX_TAG = os.environ.get("LORE_MANYLINUX_TAG", "manylinux_2_39")
 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 SYSTEM = platform.system().lower()
 MACHINE = platform.machine().lower().replace("x86_64", "amd64")
 
@@ -81,6 +83,11 @@ def _py_version():
     return version
 
 
+def _long_description():
+    with open(os.path.join(CURRENT_DIR, "README.md"), encoding="utf-8") as f:
+        return f.read()
+
+
 def _py_package():
     return [
         "include/*.h",
@@ -94,6 +101,15 @@ setup(
     version=_py_version(),
     license="MIT",
     author="Epic Games, Inc.",
+    description=(
+        "Python SDK for Lore, a scalable version control system for code "
+        "and large binary assets."
+    ),
+    project_urls={
+        "Homepage": "https://github.com/EpicGames/lore-python",
+    },
+    long_description=_long_description(),
+    long_description_content_type="text/markdown",
     python_requires=">=3.10",
     install_requires=["cffi>=2.0.0"],
     packages=["lore", "lore.types", "lore.include", "lore.lib"],

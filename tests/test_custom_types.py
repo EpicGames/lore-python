@@ -2,37 +2,37 @@ import gc
 
 import pytest
 
+from lore import _loreffi
 from lore.types import (
-    LoreErrorDetail,
-    LoreTraceLocation,
     LoreAddress,
+    LoreBinary,
     LoreBranchDiffNodeData,
+    LoreBranchId,
     LoreBranchPoint,
     LoreBranchSwitchData,
+    LoreBytes,
+    LoreContext,
+    LoreErrorDetail,
     LoreFragment,
+    LoreHash,
     LoreHashArray,
     LoreInstanceIdArray,
     LoreMetadata,
-    LoreHash,
-    LoreBinary,
-    LoreBytes,
-    LoreString,
-    LoreContext,
-    LoreBranchId,
     LorePartition,
-    LoreStore,
+    LoreRevisionTreeMetadataSetEntry,
     LoreStorageGetItem,
     LoreStorageGetItemArray,
     LoreStoragePutItem,
     LoreStoragePutItemArray,
-    LoreRevisionTreeMetadataSetEntry,
+    LoreStore,
+    LoreString,
+    LoreTraceLocation,
 )
 from lore.types.enums import (
     LoreBranchLocation,
     LoreFileAction,
     LoreMetadataType,
 )
-from lore import _loreffi
 
 mymetadatatypearray = [
     LoreMetadataType.BINARY,
@@ -212,7 +212,12 @@ def test_lore_metadata_unknown_type_rejected():
             myaddress,
             lambda m: (m.address.hash.data, m.address.context.data),
         ),
-        (LoreMetadataType.BOOLEAN, LoreMetadata.from_boolean, True, lambda m: m.boolean),
+        (
+            LoreMetadataType.BOOLEAN,
+            LoreMetadata.from_boolean,
+            True,
+            lambda m: m.boolean,
+        ),
         (
             LoreMetadataType.CONTEXT,
             LoreMetadata.from_context,
@@ -220,14 +225,24 @@ def test_lore_metadata_unknown_type_rejected():
             lambda m: m.context.data,
         ),
         (LoreMetadataType.HASH, LoreMetadata.from_hash, myhash, lambda m: m.hash.data),
-        (LoreMetadataType.NUMERIC, LoreMetadata.from_numeric, 1234, lambda m: m.numeric),
+        (
+            LoreMetadataType.NUMERIC,
+            LoreMetadata.from_numeric,
+            1234,
+            lambda m: m.numeric,
+        ),
         (
             LoreMetadataType.STRING,
             LoreMetadata.from_string,
             "mystring",
             lambda m: m.string,
         ),
-        (LoreMetadataType.BINARY, LoreMetadata.from_binary, mybinary, lambda m: m.binary),
+        (
+            LoreMetadataType.BINARY,
+            LoreMetadata.from_binary,
+            mybinary,
+            lambda m: m.binary,
+        ),
     ],
 )
 def test_lore_metadata_constructor_round_trips(type_, factory, value, read):

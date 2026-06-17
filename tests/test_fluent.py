@@ -1,8 +1,9 @@
-import pytest
 import asyncio
 import threading
 import time
 import uuid
+
+import pytest
 
 from lore import Lore, LoreError
 from lore.types.args import (
@@ -11,8 +12,8 @@ from lore.types.args import (
     LoreRepositoryCreateArgs,
     LoreRepositoryStatusArgs,
 )
-from lore.types.events import LoreCompleteEventData, LoreEndEventData
 from lore.types.enums import LoreEventTag
+from lore.types.events import LoreCompleteEventData, LoreEndEventData
 
 
 class TestFluentAPI:
@@ -598,9 +599,11 @@ class TestFluentAPI:
         # A raising callback must still let the iteration finish: END terminates
         # the queue regardless.
         with pytest.raises(ValueError, match="callback boom"):
-            async for _event in Lore.repository_create(
-                self.global_args, self.args
-            ).callback(handler).async_iter():
+            async for _event in (
+                Lore.repository_create(self.global_args, self.args)
+                .callback(handler)
+                .async_iter()
+            ):
                 pass
 
     @pytest.mark.asyncio

@@ -159,6 +159,7 @@ def make_consumer(p: Pass, variant: str) -> Callable[[object], None]:
     materialized.
     """
     if variant == "A":
+
         def consume_a(data: object) -> None:
             p.events += 1
             p.accumulated_size += data.size  # type: ignore[attr-defined]
@@ -328,9 +329,9 @@ async def _run_fluent_async_iter_impl(
     consume = make_consumer(p, variant)
     args = LoreRepositoryDumpArgs()
     t0 = time.perf_counter()
-    async for event in Lore.repository_dump(global_args, args).filter_by_type(
-        [NODE_TAG]
-    ).async_iter():
+    async for event in (
+        Lore.repository_dump(global_args, args).filter_by_type([NODE_TAG]).async_iter()
+    ):
         consume(event)
     p.ms = _ms_since(t0)
     p.rss_bytes = _current_rss_bytes()
@@ -343,9 +344,7 @@ def run_fluent_collect(global_args: LoreGlobalArgs, variant: str) -> Pass:
     args = LoreRepositoryDumpArgs()
     t0 = time.perf_counter()
     events = (
-        Lore.repository_dump(global_args, args)
-        .filter_by_type([NODE_TAG])
-        .collect()
+        Lore.repository_dump(global_args, args).filter_by_type([NODE_TAG]).collect()
     )
     for event in events:
         consume(event)
@@ -465,7 +464,7 @@ def spawn_child(mode: str, variant: str, repo_path: str) -> ChildResult:
         raise RuntimeError(
             f"child stdout missing {CHILD_JSON_MARKER!r}; tail={preview!r}"
         )
-    json_text = out[idx + len(CHILD_JSON_MARKER):].strip()
+    json_text = out[idx + len(CHILD_JSON_MARKER) :].strip()
     data: dict[str, Any] = json.loads(json_text)
     passes = [Pass(**p) for p in data["passes"]]
     return ChildResult(
@@ -564,15 +563,17 @@ def print_summary(result: VariantResult) -> None:
         total_events = sum(p.events for p in child.passes)
         total_ms = sum(times)
         eps = int(total_events * 1000 / total_ms) if total_ms > 0 else 0
-        rows.append((
-            mode,
-            min(times),
-            sum(times) / len(times),
-            max(times),
-            eps,
-            child.peak_rss_bytes,
-            child.passes[0].events,
-        ))
+        rows.append(
+            (
+                mode,
+                min(times),
+                sum(times) / len(times),
+                max(times),
+                eps,
+                child.peak_rss_bytes,
+                child.passes[0].events,
+            )
+        )
 
     fastest_mean = min(r[2] for r in rows) if rows else 1.0
     for mode, mn, mean, mx, eps, peak_rss, events in rows:

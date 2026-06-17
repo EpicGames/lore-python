@@ -1,6 +1,7 @@
-import pytest
 import asyncio
 import uuid
+
+import pytest
 
 from lore import Lore
 from lore.types.args import (
@@ -8,8 +9,8 @@ from lore.types.args import (
     LoreRepositoryCreateArgs,
     LoreRepositoryStatusArgs,
 )
-from lore.types.events import LoreCompleteEventData, LoreEndEventData
 from lore.types.enums import LoreEventTag
+from lore.types.events import LoreCompleteEventData, LoreEndEventData
 
 
 class TestFluentAPI:

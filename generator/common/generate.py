@@ -6,9 +6,8 @@ Generate lorelib wrappers based on Jinja2 template.
 
 import os
 
-from jinja2 import Environment, FileSystemLoader
-
 from common import util
+from jinja2 import Environment, FileSystemLoader
 
 
 def render_content(
@@ -22,7 +21,9 @@ def render_content(
         f.write(content)
 
 
-def generate_templates(header_file, templates_dir, generate_targets, ast_visitor, build_augmented):
+def generate_templates(
+    header_file, templates_dir, generate_targets, ast_visitor, build_augmented
+):
     """Generates the given set of templates
 
     Args:
@@ -32,7 +33,7 @@ def generate_templates(header_file, templates_dir, generate_targets, ast_visitor
     """
 
     print("Loading and cleaning lore header", end=" ")
-    (ast, line_comments) = util.load_and_clean_header(header_file)
+    ast, line_comments = util.load_and_clean_header(header_file)
     print("done.")
 
     print("Parsing lore header", end=" ")

@@ -1,26 +1,27 @@
 import pytest
 
+from lore import _loreffi
 from lore.types import (
     LoreAddress,
+    LoreBinary,
     LoreBranchDiffNodeData,
+    LoreBranchId,
     LoreBranchPoint,
     LoreBranchSwitchData,
+    LoreBytes,
+    LoreContext,
     LoreFragment,
+    LoreHash,
     LoreHashArray,
     LoreInstanceIdArray,
     LoreMetadata,
-    LoreHash,
-    LoreBinary,
-    LoreBytes,
-    LoreString,
-    LoreContext,
-    LoreBranchId,
     LorePartition,
-    LoreStore,
     LoreStorageGetItem,
     LoreStorageGetItemArray,
     LoreStoragePutItem,
     LoreStoragePutItemArray,
+    LoreStore,
+    LoreString,
 )
 from lore.types.enums import (
     LoreBranchLocation,
@@ -28,7 +29,6 @@ from lore.types.enums import (
     LoreMetadataTag,
     LoreMetadataType,
 )
-from lore import _loreffi
 
 mymetadatatypearray = [
     LoreMetadataType.BINARY,

@@ -295,7 +295,9 @@ def build_augmented(visitor):
     for arr in array_types:
         py_map[arr["array_c_type"]] = arr["py_annotation"]
         init_map.setdefault(arr["py_annotation"], "list()")
-        dataclass_init_map.setdefault(arr["py_annotation"], "field(default_factory=list)")
+        dataclass_init_map.setdefault(
+            arr["py_annotation"], "field(default_factory=list)"
+        )
         if arr["array_c_type"] not in blit_types:
             blit_types.append(arr["array_c_type"])
         if arr["array_c_type"] not in hardcoded_blit_types:
@@ -307,7 +309,9 @@ def build_augmented(visitor):
     # hand-written FFI classes or are simply unused.
     for arr in event_array_types:
         py_map.setdefault(arr["array_c_type"], arr["py_annotation"])
-        dataclass_init_map.setdefault(arr["py_annotation"], "field(default_factory=list)")
+        dataclass_init_map.setdefault(
+            arr["py_annotation"], "field(default_factory=list)"
+        )
         if arr["array_c_type"] not in hardcoded_blit_types:
             hardcoded_blit_types.append(arr["array_c_type"])
 

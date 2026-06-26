@@ -449,7 +449,7 @@ class {{ class_name }}:
             {{ field_name }}: {{ py_map[field_type] }} = {{ init_map[py_map[field_type]]}},
         {% endfor %}
         ):
-            """
+            r"""
             Args:
         {% for field in struct_fields %}
             {% set field_type = field.0 %}
@@ -486,7 +486,7 @@ class {{ class_name }}:
     @property
     def {{ field_name }}(self) -> {{ prop_type }}:
             {% if field.3 %}
-        """{{ "\n        ".join(field.3) }}
+        r"""{{ "\n        ".join(field.3) }}
         """
             {% endif %}
             {% if field_type in from_ffi_scalar_types or field_type in from_ffi_struct_types %}
@@ -511,7 +511,11 @@ class {{ class_name }}:
         {% endfor %}
 
     def as_value(self):
-        return self.cdata[0]
+        # cdata may be a pointer (constructed locally) or a struct value
+        # (returned by from_ffi on an array element); only the former is indexable.
+        if _loreffi.typeof(self.cdata).kind == "pointer":
+            return self.cdata[0]
+        return self.cdata
 
     def as_ptr(self):
         return self.cdata

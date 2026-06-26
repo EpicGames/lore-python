@@ -86,7 +86,7 @@ class {{ class_name }}:
             {{ field_name }}: {{ py_map[field_type] }} = {{ init_map[py_map[field_type]]}},
         {% endfor %}
         ):
-            """
+            r"""
             Args:
         {% for field in struct_fields %}
             {% set field_type = field.0 %}
@@ -109,7 +109,7 @@ class {{ class_name }}:
     @property
     def {{ field_name }}(self) -> {{ py_map[field_type] }}:
         {% if field.3 %}
-        """{{ "\n        ".join(field.3) }}
+        r"""{{ "\n        ".join(field.3) }}
         """
         {% endif %}
         {% if field_type in blit_types %}

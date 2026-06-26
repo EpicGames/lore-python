@@ -91,7 +91,7 @@ class {{ class_name }}FFI:
     @property
     def {{ field_name }}(self) -> {{ return_type }}:
             {% if field.3 %}
-        """{{ "\n        ".join(field.3) }}"""
+        r"""{{ "\n        ".join(field.3) }}"""
             {% endif %}
         self._verify_property_access()
         return {{ return_type }}.from_ffi(self._cdata.{{ field_name }}, {'disposed': False})
@@ -99,7 +99,7 @@ class {{ class_name }}FFI:
     @property
     def {{ field_name }}(self) -> {{ prop_type }}:
             {% if field.3 %}
-        """{{ "\n        ".join(field.3) }}"""
+        r"""{{ "\n        ".join(field.3) }}"""
             {% endif %}
         self._verify_property_access()
             {% if field_type in from_ffi_scalar_types or field_type in from_ffi_struct_types %}
@@ -158,7 +158,7 @@ class {{ class_name }}:
     {{ field_name }}: {{ prop_type }} {{ init_value }}
         {% endif %}
         {% if field.3 %}
-    """{{ "\n    ".join(field.3) }}"""
+    r"""{{ "\n    ".join(field.3) }}"""
         {% endif %}
     {% endfor %}
     {% endif %}

@@ -60,4 +60,4 @@ _lore, _loreffi = initialise()
 
 # Re-export the fluent API entry points so users can do `from lore_py import Lore`.
 # The low-level FFI wrappers remain accessible via `from lore_py.native import ...`.
-from .fluent import Lore, LoreExecutor  # noqa: E402
+from .fluent import Lore, LoreError, LoreExecutor  # noqa: E402

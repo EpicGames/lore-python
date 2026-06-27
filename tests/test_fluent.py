@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import uuid
 
-from lore import Lore
+from lore import Lore, LoreError
 from lore.types.args import (
     LoreGlobalArgs,
     LoreRepositoryCreateArgs,
@@ -164,19 +164,40 @@ class TestFluentAPI:
         invalid_args = LoreGlobalArgs()
         invalid_args.offline = True
         invalid_args.repository_path = "/tmp/nonexistent-repo-path"
-        result = Lore.repository_status(invalid_args, LoreRepositoryStatusArgs()).wait()
-        assert result != 0
+        with pytest.raises(LoreError) as exc_info:
+            Lore.repository_status(invalid_args, LoreRepositoryStatusArgs()).wait()
+        assert exc_info.value.return_code != 0
+        assert str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_wait_async_nonzero_return_code(self):
+        invalid_args = LoreGlobalArgs()
+        invalid_args.offline = True
+        invalid_args.repository_path = "/tmp/nonexistent-repo-path"
+        with pytest.raises(LoreError) as exc_info:
+            await Lore.repository_status(
+                invalid_args, LoreRepositoryStatusArgs()
+            ).wait_async()
+        assert exc_info.value.return_code != 0
 
     def test_collect_nonzero_return_code(self):
         invalid_args = LoreGlobalArgs()
         invalid_args.offline = True
         invalid_args.repository_path = "/tmp/nonexistent-repo-path"
-        events = Lore.repository_status(
-            invalid_args, LoreRepositoryStatusArgs()
-        ).collect()
-        complete_events = [e for e in events if isinstance(e, LoreCompleteEventData)]
-        assert len(complete_events) == 1
-        assert complete_events[0].status != 0
+        with pytest.raises(LoreError) as exc_info:
+            Lore.repository_status(invalid_args, LoreRepositoryStatusArgs()).collect()
+        assert exc_info.value.return_code != 0
+
+    @pytest.mark.asyncio
+    async def test_collect_async_nonzero_return_code(self):
+        invalid_args = LoreGlobalArgs()
+        invalid_args.offline = True
+        invalid_args.repository_path = "/tmp/nonexistent-repo-path"
+        with pytest.raises(LoreError) as exc_info:
+            await Lore.repository_status(
+                invalid_args, LoreRepositoryStatusArgs()
+            ).collect_async()
+        assert exc_info.value.return_code != 0
 
     @pytest.mark.asyncio
     async def test_async_iter_nonzero_return_code(self):
@@ -184,10 +205,14 @@ class TestFluentAPI:
         invalid_args.offline = True
         invalid_args.repository_path = "/tmp/nonexistent-repo-path"
         events = []
-        async for event in Lore.repository_status(
-            invalid_args, LoreRepositoryStatusArgs()
-        ).async_iter():
-            events.append(event)
+        # The iterator yields the events first, then raises once the operation
+        # completes with a non-zero return code.
+        with pytest.raises(LoreError) as exc_info:
+            async for event in Lore.repository_status(
+                invalid_args, LoreRepositoryStatusArgs()
+            ).async_iter():
+                events.append(event)
+        assert exc_info.value.return_code != 0
         complete_events = [e for e in events if isinstance(e, LoreCompleteEventData)]
         assert len(complete_events) == 1
         assert complete_events[0].status != 0
@@ -404,14 +429,13 @@ class TestFluentAPI:
         assert result == 0
 
     def test_complete_and_end_events_emitted_for_all_methods(self, tmp_path):
-        self.global_args.repository_path = str(tmp_path)
-
         # wait + callback
         wait_events = []
 
         def wait_handler(lore_event, _user_context):
             wait_events.append(lore_event.get_data().clone())
 
+        self.global_args.repository_path = str(tmp_path / "wait")
         self.args.repository_url = str(uuid.uuid4())
         Lore.repository_create(self.global_args, self.args).callback(
             wait_handler
@@ -419,7 +443,9 @@ class TestFluentAPI:
         assert any(isinstance(e, LoreCompleteEventData) for e in wait_events)
         assert any(isinstance(e, LoreEndEventData) for e in wait_events)
 
-        # collect
+        # collect (fresh path: re-creating a repository at an existing path now
+        # raises a LoreError)
+        self.global_args.repository_path = str(tmp_path / "collect")
         self.args.repository_url = str(uuid.uuid4())
         collect_events = Lore.repository_create(self.global_args, self.args).collect()
         assert any(isinstance(e, LoreCompleteEventData) for e in collect_events)

@@ -18,7 +18,7 @@ from lore.types.args import (
 )
 from lore.types.enums import LoreLogLevel, LoreEventTag
 from lore.types.events import LoreEventFFI
-from lore import Lore
+from lore import Lore, LoreError
 
 
 def logger(lore_event: LoreEventFFI, _user_context):
@@ -74,60 +74,51 @@ PATHS = [
 ]
 
 
-# pylint: disable=missing-function-docstring, redefined-outer-name
-def verify_result(operation_name: str, result: int):
-    if result != 0:
-        print(f"Lore {operation_name} failed.")
-        exit(1)
-    print(f"Lore {operation_name} success.")
+# Lore operations raise a LoreError when they finish with a non-zero return
+# code; the exception message carries the underlying error detail. A single
+# try/except around the workflow is all that is needed to handle failures.
+try:
+    # Initialize Lore
+    Lore.log_configure(LOG_CONFIG)
 
+    # Configure global log handler
+    Lore.global_callback(LoreEventTag.LOG, logger)
 
-# Initialize Lore
-result = Lore.log_configure(LOG_CONFIG)
-verify_result("LogConfigure", result)
+    # Create repository
+    Lore.repository_create(
+        GLOBALS, LoreRepositoryCreateArgs(repository_url=REPOSITORY_URL)
+    ).callback(event_handler).wait()
+    print("Repository created.")
 
-# Configure global log handler
-Lore.global_callback(LoreEventTag.LOG, logger)
+    # Create files to commit to the new repository
+    create_files()
 
-# Create repository
-args = LoreRepositoryCreateArgs(
-    repository_url=REPOSITORY_URL,
-)
-result = Lore.repository_create(GLOBALS, args).callback(event_handler).wait()
-verify_result("Repo Create", result)
+    # Stage files
+    Lore.file_stage(GLOBALS, LoreFileStageArgs(paths=PATHS)).callback(
+        event_handler
+    ).wait()
+    print("Files staged.")
 
-# Create files to commit to the new repository
-create_files()
+    # Revision commit
+    Lore.revision_commit(
+        GLOBALS, LoreRevisionCommitArgs(message="Initial commit")
+    ).callback(event_handler).wait()
+    print("Revision committed.")
 
-# Stage file
-args = LoreFileStageArgs(
-    paths=PATHS,
-)
-result = Lore.file_stage(GLOBALS, args).callback(event_handler).wait()
-verify_result("File Stage", result)
+    if ONLINE:
+        # Branch push
+        Lore.branch_push(GLOBALS, LoreBranchPushArgs()).callback(event_handler).wait()
+        print("Branch pushed.")
 
-# Revision commit
-args = LoreRevisionCommitArgs(
-    message="Initial commit",
-)
-result = Lore.revision_commit(GLOBALS, args).callback(event_handler).wait()
-verify_result("Revision Commit", result)
+        # Clone repository back
+        globals_clone = LoreGlobalArgs(repository_path=REPOSITORY_PATH + "_clone")
+        Lore.repository_clone(
+            globals_clone, LoreRepositoryCloneArgs(repository_url=REPOSITORY_URL)
+        ).callback(event_handler).wait()
+        print("Repository cloned.")
 
-if ONLINE:
-    # Branch push
-    args = LoreBranchPushArgs()
-    result = Lore.branch_push(GLOBALS, args).callback(event_handler).wait()
-    verify_result("Branch Push", result)
-
-    # Clone repository
-    globals_clone = LoreGlobalArgs(
-        repository_path=REPOSITORY_PATH + "_clone",
-    )
-    args = LoreRepositoryCloneArgs(
-        repository_url=REPOSITORY_URL,
-    )
-    result = Lore.repository_clone(globals_clone, args).callback(event_handler).wait()
-    verify_result("Repository Clone", result)
-
-result = Lore.shutdown()
-verify_result("Shutdown", result)
+    Lore.shutdown()
+    print("Done.")
+except LoreError as error:
+    print(f"Lore operation failed: {error}")
+    exit(1)

@@ -15,6 +15,26 @@ from .native import *
 
 {% import "utils.ji" as utils %}
 
+class LoreError(Exception):
+    """Raised when a Lore operation finishes with a non-zero return code.
+
+    The message is built from the ERROR events emitted during the operation.
+    When no ERROR event was emitted it falls back to the error message of the
+    failed COMPLETE event (non-zero status), so an explicit error always takes
+    precedence over the generic completion failure.
+    """
+
+    def __init__(self, return_code: int, messages: list[str] = None):
+        self.return_code = return_code
+        self.messages = messages or []
+        if self.messages:
+            super().__init__(
+                f"Lore operation failed with code {return_code}: {'; '.join(self.messages)}"
+            )
+        else:
+            super().__init__(f"Lore operation failed with code {return_code}")
+
+
 class LoreExecutor:
     def __init__(self, global_args, args, function, function_async):
         self._global_args = global_args;
@@ -28,6 +48,9 @@ class LoreExecutor:
         self._user_context = 0
         self._terminated = False
         self._event_loop = None
+        self._error_messages = []
+        self._complete_error = None
+        self._async_future = None
 
     async def __aiter__(self):
         while True:
@@ -35,15 +58,21 @@ class LoreExecutor:
             if lore_event is None:
                 break
             yield lore_event
+        # The operation has finished: surface a non-zero completion as an error.
+        if self._async_future is not None:
+            return_code = await self._async_future
+            self._raise_if_error(return_code)
 
     def _wait_event_handler(self, lore_event: LoreEventFFI, user_context: int):
         Lore._handle_event_subscriptions(lore_event, user_context)
+        self._record_terminal_event(lore_event)
         if self._filter_tags and lore_event.tag not in self._filter_tags:
             return
         self._callback(lore_event, user_context)
 
     def _collect_event_handler(self, lore_event: LoreEventFFI, user_context: int):
         Lore._handle_event_subscriptions(lore_event, user_context)
+        self._record_terminal_event(lore_event)
         if self._filter_tags and lore_event.tag not in self._filter_tags:
             return
         self._callback(lore_event, user_context)
@@ -55,6 +84,7 @@ class LoreExecutor:
             raise RuntimeError("There is no event loop currently running.")
 
         Lore._handle_event_subscriptions(lore_event, user_context)
+        self._record_terminal_event(lore_event)
         if self._filter_tags and lore_event.tag not in self._filter_tags:
             if lore_event.tag == LoreEventTag.END:
                 self._event_loop.call_soon_threadsafe(self._queue.put_nowait, None)
@@ -71,6 +101,35 @@ class LoreExecutor:
         if self._terminated:
             raise RuntimeError("Already started")
 
+    def _reset_terminal_state(self):
+        self._error_messages = []
+        self._complete_error = None
+        self._async_future = None
+
+    def _record_terminal_event(self, lore_event: LoreEventFFI):
+        # Capture error context from terminal events: the message of every ERROR
+        # event, and the error message of a failed COMPLETE event (non-zero
+        # status). Must run inside the callback while the FFI data is still live.
+        if lore_event.tag == LoreEventTag.ERROR:
+            self._error_messages.append(lore_event.get_data().error_inner)
+        elif lore_event.tag == LoreEventTag.COMPLETE:
+            complete_data = lore_event.get_data()
+            if complete_data.status != 0:
+                self._complete_error = complete_data.error.message
+
+    def _terminal_error_messages(self):
+        # ERROR event messages take precedence; otherwise fall back to the failed
+        # COMPLETE event's error message when one was recorded.
+        if self._error_messages:
+            return self._error_messages
+        if self._complete_error:
+            return [self._complete_error]
+        return []
+
+    def _raise_if_error(self, return_code: int):
+        if return_code != 0:
+            raise LoreError(return_code, self._terminal_error_messages())
+
     def callback(self, value: Callable[["LoreEventFFI", int], None]):
         self._callback = value
         return self
@@ -86,37 +145,55 @@ class LoreExecutor:
     def wait(self):
         self._verify_termination()
         self._terminated = True
+        self._reset_terminal_state()
         callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._wait_event_handler)
-        return self._function(self._global_args, self._args, callback)
+        return_code = self._function(self._global_args, self._args, callback)
+        self._raise_if_error(return_code)
+        return return_code
 
     def wait_async(self):
         self._verify_termination()
         self._terminated = True
+        self._reset_terminal_state()
         callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._wait_event_handler)
-        return self._function_async(self._global_args, self._args, callback)
+        # Start the operation eagerly (so multiple wait_async() calls can run
+        # concurrently) and return a coroutine that awaits it and raises on a
+        # non-zero return code.
+        future = self._function_async(self._global_args, self._args, callback)
+        return self._await_with_error_check(future)
+
+    async def _await_with_error_check(self, future):
+        return_code = await future
+        self._raise_if_error(return_code)
+        return return_code
 
     def async_iter(self):
         self._verify_termination()
         self._terminated = True
+        self._reset_terminal_state()
         self._event_loop = asyncio.get_running_loop()
         callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._async_iter_event_handler)
-        self._function_async(self._global_args, self._args, callback);
+        self._async_future = self._function_async(self._global_args, self._args, callback)
         return self
 
     def collect(self):
         self._verify_termination()
         self._terminated = True
+        self._reset_terminal_state()
         self._collected_events.clear();
         callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._collect_event_handler)
-        self._function(self._global_args, self._args, callback)
+        return_code = self._function(self._global_args, self._args, callback)
+        self._raise_if_error(return_code)
         return self._collected_events
 
     async def collect_async(self):
         self._verify_termination()
         self._terminated = True
+        self._reset_terminal_state()
         self._collected_events.clear();
         callback = LoreEventCallbackConfig(user_context = self._user_context, func = self._collect_event_handler)
-        result = await self._function_async(self._global_args, self._args, callback)
+        return_code = await self._function_async(self._global_args, self._args, callback)
+        self._raise_if_error(return_code)
         return self._collected_events
 
 class Lore:
@@ -146,11 +223,17 @@ class Lore:
 
     @staticmethod
     def log_configure(log_config: LoreLogConfig):
-        return lore_log_configure(log_config)
+        return_code = lore_log_configure(log_config)
+        if return_code != 0:
+            raise LoreError(return_code)
+        return return_code
 
     @staticmethod
     def shutdown():
-        return lore_shutdown()
+        return_code = lore_shutdown()
+        if return_code != 0:
+            raise LoreError(return_code)
+        return return_code
 
     @staticmethod
     def global_callback(event_type: LoreEventTag, callback: Callable[["LoreEventFFI", int], None]):

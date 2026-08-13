@@ -34,7 +34,6 @@ from lore.native import (
     lore_revision_info,
     lore_revision_metadata_list,
     lore_revision_metadata_set,
-    lore_shutdown,
     lore_storage_close,
     lore_storage_close_async,
     lore_storage_get,
@@ -136,7 +135,6 @@ class LoreBase:
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
-        lore_shutdown()
 
     def create_repository(self):
         args = LoreRepositoryCreateArgs()
@@ -231,9 +229,6 @@ class TestLoreRepositoryCommand:
     def setup_method(self):
         self.global_args = LoreGlobalArgs()
         self.global_args.offline = True
-
-    def teardown_method(self):
-        lore_shutdown()
 
     def test_create_repository(self, tmp_path):
         self.global_args.repository_path = str(tmp_path)
@@ -992,9 +987,6 @@ class TestLoreStorageCommand:
     def setup_method(self):
         self.global_args = LoreGlobalArgs()
         self.global_args.offline = True
-
-    def teardown_method(self):
-        lore_shutdown()
 
     def _open_in_memory(self) -> int:
         opened_handles: list[int] = []

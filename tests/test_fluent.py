@@ -20,9 +20,6 @@ class TestFluentAPI:
         self.args = LoreRepositoryCreateArgs()
         self.args.repository_url = str(uuid.uuid4())
 
-    def teardown_method(self):
-        Lore.shutdown()
-
     def test_wait_works(self, tmp_path):
         self.global_args.repository_path = str(tmp_path)
         result = Lore.repository_create(self.global_args, self.args).wait()

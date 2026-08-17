@@ -13,6 +13,11 @@ from .. import _lore
 
 Creates a Python enum from the C enum
 
+The visitor hands each enum over as a list of `(name, number)` pairs. We only
+need the name here: the number is read back off the loaded library, so an enum
+that is neither zero-based nor contiguous carries over as written without the
+template having to spell any value out.
+
 For instance, for the `enum lore_branch_location_t`
 
     typedef enum lore_branch_location_t {
@@ -33,7 +38,7 @@ the result is:
     {% set value_prefix = enum_name.removesuffix("_tag") %}
     {% set class_name = pascal_case(enum_name)%}
 class {{ class_name }}(IntEnum):
-    {% for value in enum_values %}
+    {% for value, number in enum_values %}
         {{value}} = _lore.{{ value_prefix.upper() }}_{{ value }}
     {% endfor %}
 {% endfor %}

@@ -227,7 +227,7 @@ class LoreEventFFI:
         return self._cdata.tag
 
     def get_data(self) -> (
-        {% for value in symbols.enums["lore_event_tag_t"] %}
+        {% for value, number in symbols.enums["lore_event_tag_t"] %}
             {% if not loop.last %}
         {{ pascal_case("lore_" + value.lower() + "_event_data") }}FFI |
             {% else %}
@@ -238,7 +238,7 @@ class LoreEventFFI:
         self._verify_property_access()
 
         match self.tag:
-        {% for value in symbols.enums["lore_event_tag_t"] %}
+        {% for value, number in symbols.enums["lore_event_tag_t"] %}
             {% set type = pascal_case("lore_" + value.lower() + "_event_data") %}
             case LoreEventTag.{{ value }}:
                 return {{ type }}FFI.from_ffi(self._cdata.{{ value.lower() }}, self._state)

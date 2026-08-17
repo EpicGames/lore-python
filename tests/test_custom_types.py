@@ -21,11 +21,11 @@ from lore.types import (
     LoreStorageGetItemArray,
     LoreStoragePutItem,
     LoreStoragePutItemArray,
+    LoreRevisionTreeMetadataSetEntry,
 )
 from lore.types.enums import (
     LoreBranchLocation,
     LoreFileAction,
-    LoreMetadataTag,
     LoreMetadataType,
 )
 from lore import _loreffi
@@ -106,11 +106,11 @@ def test_lore_binary():
 
 def test_lore_metadata_address():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.ADDRESS
+    cdata.tag = LoreMetadataType.ADDRESS
     cdata.address = myaddress.as_value()
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.ADDRESS
+    assert mymetadata.tag == LoreMetadataType.ADDRESS
     assert isinstance(mymetadata.address, LoreAddress)
     assert isinstance(mymetadata.address.hash, LoreHash)
     assert isinstance(mymetadata.address.context, LoreContext)
@@ -118,71 +118,171 @@ def test_lore_metadata_address():
 
 def test_lore_metadata_binary():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.BINARY
+    cdata.tag = LoreMetadataType.BINARY
     binary = LoreBinary(mybinary)
     cdata.binary = binary.as_value()
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.BINARY
+    assert mymetadata.tag == LoreMetadataType.BINARY
     assert isinstance(mymetadata.binary, bytes)
     assert len(mymetadata.binary) == 10
 
 
 def test_lore_metadata_boolean():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.BOOLEAN
+    cdata.tag = LoreMetadataType.BOOLEAN
     cdata.boolean = True
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.BOOLEAN
+    assert mymetadata.tag == LoreMetadataType.BOOLEAN
     assert isinstance(mymetadata.boolean, bool)
     assert mymetadata.boolean
 
 
 def test_lore_metadata_context():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.CONTEXT
+    cdata.tag = LoreMetadataType.CONTEXT
     context = LoreContext(mycontext)
     cdata.context = context.as_value()
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.CONTEXT
+    assert mymetadata.tag == LoreMetadataType.CONTEXT
     assert isinstance(mymetadata.context, LoreContext)
     assert len(mymetadata.context.data) == 16
 
 
 def test_lore_metadata_hash():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.HASH
+    cdata.tag = LoreMetadataType.HASH
     hash = LoreHash(myhash)
     cdata.hash = hash.as_value()
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.HASH
+    assert mymetadata.tag == LoreMetadataType.HASH
     assert isinstance(mymetadata.hash, LoreHash)
     assert len(mymetadata.hash.data) == 32
 
 
 def test_lore_metadata_numeric():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.NUMERIC
+    cdata.tag = LoreMetadataType.NUMERIC
     cdata.numeric = 1234
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.NUMERIC
+    assert mymetadata.tag == LoreMetadataType.NUMERIC
     assert mymetadata.numeric == 1234
 
 
 def test_lore_metadata_string():
     cdata = _loreffi.new("lore_metadata_t*")
-    cdata.tag = LoreMetadataTag.STRING
+    cdata.tag = LoreMetadataType.STRING
     string = LoreString("mystring")
     cdata.string = string.as_value()
     mymetadata = LoreMetadata.from_ffi(cdata)
 
-    assert mymetadata.tag == LoreMetadataTag.STRING
+    assert mymetadata.tag == LoreMetadataType.STRING
     assert isinstance(mymetadata.string, str)
     assert mymetadata.string == "mystring"
+
+
+def test_lore_metadata_untyped_constructor():
+    mymetadata = LoreMetadata()
+
+    # The header gives lore_metadata_type_t no zero value, so an untyped value
+    # has a tag that does not name a kind.
+    with pytest.raises(ValueError):
+        mymetadata.tag
+
+
+def test_lore_metadata_unknown_type_rejected():
+    with pytest.raises(ValueError):
+        LoreMetadata(0, "not a kind")
+
+
+@pytest.mark.parametrize(
+    "type_, factory, value, read",
+    [
+        (
+            LoreMetadataType.ADDRESS,
+            LoreMetadata.from_address,
+            myaddress,
+            lambda m: (m.address.hash.data, m.address.context.data),
+        ),
+        (LoreMetadataType.BOOLEAN, LoreMetadata.from_boolean, True, lambda m: m.boolean),
+        (
+            LoreMetadataType.CONTEXT,
+            LoreMetadata.from_context,
+            mycontext,
+            lambda m: m.context.data,
+        ),
+        (LoreMetadataType.HASH, LoreMetadata.from_hash, myhash, lambda m: m.hash.data),
+        (LoreMetadataType.NUMERIC, LoreMetadata.from_numeric, 1234, lambda m: m.numeric),
+        (
+            LoreMetadataType.STRING,
+            LoreMetadata.from_string,
+            "mystring",
+            lambda m: m.string,
+        ),
+        (LoreMetadataType.BINARY, LoreMetadata.from_binary, mybinary, lambda m: m.binary),
+    ],
+)
+def test_lore_metadata_constructor_round_trips(type_, factory, value, read):
+    from_ctor = LoreMetadata(type_, value)
+    from_factory = factory(value)
+
+    assert from_ctor.tag == type_
+    assert from_factory.tag == type_
+    assert read(from_ctor) == read(from_factory)
+
+
+def test_lore_metadata_address_constructor_copies():
+    mymetadata = LoreMetadata.from_address(myaddress)
+
+    assert mymetadata.address.hash.data == myhash
+    assert mymetadata.address.context.data == mycontext
+
+
+def test_lore_metadata_clone_outlives_source():
+    original = LoreMetadata.from_string("mystring")
+    clone = original.clone()
+    del original
+
+    assert clone.tag == LoreMetadataType.STRING
+    assert clone.string == "mystring"
+
+    original = LoreMetadata.from_binary(mybinary)
+    clone = original.clone()
+    del original
+
+    assert clone.tag == LoreMetadataType.BINARY
+    assert clone.binary == mybinary
+
+
+def test_lore_revision_tree_metadata_set_entry():
+    entry = LoreRevisionTreeMetadataSetEntry(
+        entry_id=7,
+        key="author",
+        value=LoreMetadata.from_string("fede"),
+    )
+
+    assert entry.entry_id == 7
+    assert entry.key == "author"
+    assert entry.value.tag == LoreMetadataType.STRING
+    assert entry.value.string == "fede"
+
+    clone = entry.clone()
+    del entry
+
+    assert clone.entry_id == 7
+    assert clone.key == "author"
+    assert clone.value.string == "fede"
+
+
+def test_lore_revision_tree_metadata_set_entry_none_constructor():
+    entry = LoreRevisionTreeMetadataSetEntry()
+
+    assert entry.entry_id == 0
+    assert entry.key == ""
 
 
 def test_lore_fragment():

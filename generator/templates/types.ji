@@ -428,6 +428,198 @@ class LoreEventCallbackConfig:
     user_context: int = 0
     func: Callable[['LoreEventFFI', int], None] = lambda lore_event, user_context: None
 
+{#
+
+`lore_metadata_t` is a tagged union, so it gets a hand-written wrapper rather
+than one from the loop below: the visitor drops the `tag` field when it walks a
+struct holding a union, and only the member named by the tag may be read.
+
+It is emitted ahead of the generated types because those reference it in
+`field(default_factory=LoreMetadata)`, which runs while the class body is
+executing — `lore_revision_tree_metadata_set_entry_t` is the first struct to
+hold a `lore_metadata_t`. Its own references to generated types (`LoreAddress`)
+only ever run inside a method body, so the order works one way and not the
+other.
+
+#}
+class LoreMetadata:
+    r"""A metadata value, tagged by the kind of value it holds.
+
+    `tag` names one of `LoreMetadataType` and the member that goes with it is
+    the only one that may be read. The header gives that enum no zero value, so
+    a `LoreMetadata()` built without a type holds nothing and must not be handed
+    to lorelib; it exists so a containing type can be default-constructed and
+    filled in afterwards.
+    """
+
+    # Instances built through `from_ffi` are views over memory somebody else
+    # owns and keep nothing alive, so the attribute needs a class-level default.
+    _refs = ()
+
+    def __init__(
+        self,
+        type_: LoreMetadataType | None = None,
+        value: bool | int | str | bytes | LoreAddress | None = None,
+    ):
+        r"""
+        Args:
+            type_ (LoreMetadataType | None): Kind of value to hold. `None` leaves the value untyped.
+            value: The value, in the native form its kind expects: `LoreAddress` for `ADDRESS`, `bool` for `BOOLEAN`, 16 bytes for `CONTEXT`, 32 bytes for `HASH`, `int` for `NUMERIC`, `str` for `STRING`, `bytes` for `BINARY`.
+        """
+        self.cdata = _loreffi.new("lore_metadata_t*")
+        self._refs = []
+
+        if type_ is None:
+            return
+
+        self.cdata.tag = int(type_)
+        if type_ == LoreMetadataType.ADDRESS:
+            address = LoreAddress(value.hash.data, value.context.data)
+            self.cdata.address = address.as_value()
+            self._refs.append(address)
+        elif type_ == LoreMetadataType.BOOLEAN:
+            self.cdata.boolean = int(bool(value))
+        elif type_ == LoreMetadataType.CONTEXT:
+            context = LoreContext(value)
+            self.cdata.context = context.as_value()
+            self._refs.append(context)
+        elif type_ == LoreMetadataType.HASH:
+            hash_ = LoreHash(value)
+            self.cdata.hash = hash_.as_value()
+            self._refs.append(hash_)
+        elif type_ == LoreMetadataType.NUMERIC:
+            self.cdata.numeric = value
+        elif type_ == LoreMetadataType.STRING:
+            string = LoreString(value)
+            self.cdata.string = string.as_value()
+            self._refs.append(string)
+        elif type_ == LoreMetadataType.BINARY:
+            binary = LoreBinary(value)
+            self.cdata.binary = binary.as_value()
+            self._refs.append(binary)
+        else:
+            raise ValueError(f"Unknown metadata type: {type_}")
+
+    @classmethod
+    def from_address(cls, address: LoreAddress) -> LoreMetadata:
+        return cls(LoreMetadataType.ADDRESS, address)
+
+    @classmethod
+    def from_boolean(cls, boolean: bool) -> LoreMetadata:
+        return cls(LoreMetadataType.BOOLEAN, boolean)
+
+    @classmethod
+    def from_context(cls, context: bytes) -> LoreMetadata:
+        return cls(LoreMetadataType.CONTEXT, context)
+
+    @classmethod
+    def from_hash(cls, hash: bytes) -> LoreMetadata:
+        return cls(LoreMetadataType.HASH, hash)
+
+    @classmethod
+    def from_numeric(cls, numeric: int) -> LoreMetadata:
+        return cls(LoreMetadataType.NUMERIC, numeric)
+
+    @classmethod
+    def from_string(cls, string: str) -> LoreMetadata:
+        return cls(LoreMetadataType.STRING, string)
+
+    @classmethod
+    def from_binary(cls, binary: bytes) -> LoreMetadata:
+        return cls(LoreMetadataType.BINARY, binary)
+
+    @classmethod
+    def from_ffi(cls, lore_metadata: "CData") -> LoreMetadata:
+        metadata = cls.__new__(cls)
+        metadata.cdata = lore_metadata
+        return metadata
+
+    def __repr__(self) -> str:
+        tag = self.cdata.tag
+        try:
+            return f"LoreMetadata(tag={LoreMetadataType(tag).name})"
+        except ValueError:
+            return f"LoreMetadata(tag={tag})"
+
+    @property
+    def tag(self) -> LoreMetadataType:
+        return LoreMetadataType(self.cdata.tag)
+
+    @property
+    def address(self) -> LoreAddress:
+        return LoreAddress.from_ffi(self.cdata.address)
+
+    @property
+    def boolean(self) -> bool:
+        return bool(self.cdata.boolean)
+
+    @property
+    def binary(self) -> bytes:
+        return LoreBinary.to_native(self.cdata.binary)
+
+    @property
+    def context(self) -> LoreContext:
+        return LoreContext.from_ffi(self.cdata.context)
+
+    @property
+    def hash(self) -> LoreHash:
+        return LoreHash.from_ffi(self.cdata.hash)
+
+    @property
+    def numeric(self) -> int:
+        return self.cdata.numeric
+
+    @property
+    def string(self) -> str:
+        return LoreString.to_native(self.cdata.string)
+
+    def as_value(self):
+        # cdata may be a pointer (constructed locally) or a struct value
+        # (returned by from_ffi on a field of another type); only the former is indexable.
+        if _loreffi.typeof(self.cdata).kind == "pointer":
+            return self.cdata[0]
+        return self.cdata
+
+    def as_ptr(self):
+        return self.cdata
+
+    def clone(self) -> LoreMetadata:
+        new_cdata = _loreffi.new("lore_metadata_t*")
+        new_cdata.tag = self.cdata.tag
+        tag = self.cdata.tag
+        refs = []
+        if tag == LoreMetadataType.ADDRESS:
+            addr = LoreAddress(
+                hash=self.address.hash.data,
+                context=self.address.context.data,
+            )
+            new_cdata.address = addr.as_value()
+            refs.append(addr)
+        elif tag == LoreMetadataType.BOOLEAN:
+            new_cdata.boolean = self.cdata.boolean
+        elif tag == LoreMetadataType.BINARY:
+            binary = LoreBinary(LoreBinary.to_native(self.cdata.binary))
+            new_cdata.binary = binary.as_value()
+            refs.append(binary)
+        elif tag == LoreMetadataType.CONTEXT:
+            ctx = LoreContext(bytes(_loreffi.buffer(self.cdata.context.data)))
+            new_cdata.context = ctx.as_value()
+            refs.append(ctx)
+        elif tag == LoreMetadataType.HASH:
+            h = LoreHash(bytes(_loreffi.buffer(self.cdata.hash.data)))
+            new_cdata.hash = h.as_value()
+            refs.append(h)
+        elif tag == LoreMetadataType.NUMERIC:
+            new_cdata.numeric = self.cdata.numeric
+        elif tag == LoreMetadataType.STRING:
+            s = LoreString(LoreString.to_native(self.cdata.string))
+            new_cdata.string = s.as_value()
+            refs.append(s)
+        result = LoreMetadata.__new__(LoreMetadata)
+        result.cdata = new_cdata
+        result._refs = refs
+        return result
+
 {% for struct_name, struct_fields in symbols.types.items() %}
     {% if struct_name not in hardcoded_blit_types %}
         {% set class_name = pascal_case(struct_name.removesuffix("_t")) %}
@@ -527,7 +719,7 @@ class {{ class_name }}:
             {% set field_name = field.1 %}
             {% if field_type in ["lore_hash_t", "lore_context_t", "lore_partition_t", "lore_branch_id_t", "lore_repository_id_t", "lore_instance_id_t"] %}
                 {{ field_name }} = self.{{ field_name }}.data,
-            {% elif field_type in ["lore_address_t", "lore_fragment_t"] %}
+            {% elif field_type in from_ffi_struct_types %}
                 {{ field_name }} = self.{{ field_name }}.clone(),
             {% elif field_type in blit_types %}
                 {{ field_name }} = {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self.cdata.{{ field_name }}),
@@ -539,82 +731,3 @@ class {{ class_name }}:
 
     {% endif %}
 {% endfor %}
-
-@dataclass(init=False)
-class LoreMetadata:
-    cdata: "CData"
-
-    @classmethod
-    def from_ffi(cls, lore_metadata: "CData") -> LoreMetadata:
-        metadata = cls.__new__(cls)
-        metadata.cdata = lore_metadata
-        return metadata
-
-    @property
-    def tag(self) -> LoreMetadataTag:
-        return self.cdata.tag
-
-    @property
-    def address(self) -> LoreAddress:
-        return LoreAddress.from_ffi(self.cdata.address)
-
-    @property
-    def boolean(self) -> bool:
-        return bool(self.cdata.boolean)
-
-    @property
-    def binary(self) -> LoreBinary:
-        return LoreBinary.to_native(self.cdata.binary)
-
-    @property
-    def context(self) -> LoreContext:
-        return LoreContext.from_ffi(self.cdata.context)
-
-    @property
-    def hash(self) -> LoreHash:
-        return LoreHash.from_ffi(self.cdata.hash)
-
-    @property
-    def numeric(self) -> int:
-        return self.cdata.numeric
-
-    @property
-    def string(self) -> LoreString:
-        return LoreString.to_native(self.cdata.string)
-
-    def clone(self) -> LoreMetadata:
-        new_cdata = _loreffi.new("lore_metadata_t*")
-        new_cdata.tag = self.cdata.tag
-        tag = self.cdata.tag
-        refs = []
-        if tag == LoreMetadataTag.ADDRESS:
-            addr = LoreAddress(
-                hash=self.address.hash.data,
-                context=self.address.context.data,
-            )
-            new_cdata.address = addr.as_value()
-            refs.append(addr)
-        elif tag == LoreMetadataTag.BOOLEAN:
-            new_cdata.boolean = self.cdata.boolean
-        elif tag == LoreMetadataTag.BINARY:
-            binary = LoreBinary(LoreBinary.to_native(self.cdata.binary))
-            new_cdata.binary = binary.as_value()
-            refs.append(binary)
-        elif tag == LoreMetadataTag.CONTEXT:
-            ctx = LoreContext(bytes(_loreffi.buffer(self.cdata.context.data)))
-            new_cdata.context = ctx.as_value()
-            refs.append(ctx)
-        elif tag == LoreMetadataTag.HASH:
-            h = LoreHash(bytes(_loreffi.buffer(self.cdata.hash.data)))
-            new_cdata.hash = h.as_value()
-            refs.append(h)
-        elif tag == LoreMetadataTag.NUMERIC:
-            new_cdata.numeric = self.cdata.numeric
-        elif tag == LoreMetadataTag.STRING:
-            s = LoreString(LoreString.to_native(self.cdata.string))
-            new_cdata.string = s.as_value()
-            refs.append(s)
-        result = LoreMetadata.__new__(LoreMetadata)
-        result.cdata = new_cdata
-        result._refs = refs
-        return result

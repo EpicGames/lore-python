@@ -11,7 +11,7 @@ from lore.types import (
     LorePartition,
     LoreRepositoryId,
 )
-from lore.types.enums import LoreErrorCode, LoreLogLevel
+from lore.types.enums import LoreErrorCode, LoreLogLevel, LoreMetadataType
 from lore.types.events import (
     LoreBranchCreateEventDataFFI,
     LoreBranchLatestListEntryEventDataFFI,
@@ -59,7 +59,7 @@ def test_lore_metadata_event_data():
     key_string_cdata.string = key_cdata
     key_string_cdata.length = len(key)
 
-    tag = 6
+    tag = LoreMetadataType.STRING
     text = "commit message".encode("utf-8")
     text_cdata = _loreffi.new("char[]", text)
     text_string_cdata = _loreffi.new("lore_string_t*")
@@ -79,7 +79,7 @@ def test_lore_metadata_event_data():
     assert isinstance(event, LoreMetadataEventDataFFI)
     assert event.key == "message"
     assert isinstance(event.value, LoreMetadata)
-    assert event.value.tag == 6
+    assert event.value.tag == LoreMetadataType.STRING
     assert isinstance(event.value.string, str)
     assert event.value.string == "commit message"
 

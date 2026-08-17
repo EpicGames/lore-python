@@ -70,7 +70,13 @@ class LoreVisitor(c_ast.NodeVisitor):
         enum_name = node.name if node.name != "lore_event_id_t" else "lore_event_tag_t"
         value_prefix = enum_name.removesuffix("_t").removesuffix("_tag").upper() + "_"
 
-        values = [e.name.removeprefix(value_prefix) for e in node.values.enumerators]
+        values = [
+            (
+                e.name.removeprefix(value_prefix),
+                int(e.value.value, 0) if e.value else index,
+            )
+            for index, e in enumerate(node.values.enumerators)
+        ]
         self.enums[enum_name] = values
 
     # pylint: disable=invalid-name

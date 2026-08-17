@@ -298,7 +298,8 @@ def build_augmented(visitor):
         enum_class = util.pascal_case(enum_c_type.removesuffix("_t"))
         py_map.setdefault(enum_c_type, enum_class)
         if values:
-            default = f"{enum_class}.{values[0]}"
+            first_name, _ = values[0]
+            default = f"{enum_class}.{first_name}"
             init_map.setdefault(enum_class, default)
             dataclass_init_map.setdefault(enum_class, default)
 

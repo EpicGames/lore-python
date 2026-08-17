@@ -8,6 +8,7 @@ This file is generated, do not modify it here, it may be overwritten
 
 import threading
 import asyncio
+import traceback
 from . import _loreffi, _lore
 from .types import LoreLogConfig, LoreEventCallbackConfig
 from .types.events import LoreEventFFI
@@ -24,26 +25,109 @@ from .types.args import (
 _handles = {}
 _handles_lock = threading.Lock()
 
+
+class _LoreCallState:
+    """Per-call state for one lorelib operation.
+
+    The status is read from COMPLETE but reported at END, the last event lorelib
+    dispatches, so it has to outlive a single callback invocation.
+    """
+
+    __slots__ = (
+        "callback_handle",
+        "user_context",
+        "loop",
+        "future",
+        "resolve_on_complete",
+        "status",
+        "saw_complete",
+    )
+
+    def __init__(
+        self, callback_handle, user_context, loop=None, future=None,
+        resolve_on_complete=False
+    ):
+        self.callback_handle = callback_handle
+        self.user_context = user_context
+        self.loop = loop
+        self.future = future
+        # Set for functions whose callback stays registered past COMPLETE: END
+        # only arrives when their subscription ends, so waiting for it would
+        # keep the caller pending for the lifetime of the subscription.
+        self.resolve_on_complete = resolve_on_complete
+        self.status = 0
+        self.saw_complete = False
+
+
+def _try_set_result(future, value):
+    """Resolve `future` unless it already carries a result or was cancelled.
+
+    Must run on the future's event loop.
+    """
+    if not future.done():
+        future.set_result(value)
+
+
+def _try_set_exception(future, exception):
+    """Fault `future` unless it already carries a result or was cancelled.
+
+    Must run on the future's event loop.
+    """
+    if not future.done():
+        future.set_exception(exception)
+
+
 @_loreffi.callback("void(lore_event_t*, uint64_t)")
 def _internal_event_handler(lore_event, handle_id):
     with _handles_lock:
-        if handle_id not in _handles:
-            raise RuntimeError("Unable to resolve callback")
-        (callback_handle, user_context, loop, future) = _handles[handle_id]
+        state = _handles.get(handle_id)
 
-    user_callback = _loreffi.from_handle(callback_handle)
+    if state is None:
+        raise RuntimeError("Unable to resolve callback")
+
+    user_callback = _loreffi.from_handle(state.callback_handle)
+
+    # Read the tag up front: the terminal bookkeeping below has to run even if
+    # decoding the event fails.
+    tag = lore_event.tag
 
     lore_event_ffi = LoreEventFFI.from_ffi(lore_event)
-    user_callback(lore_event_ffi, user_context)
+    try:
+        user_callback(lore_event_ffi, state.user_context)
+    except Exception:
+        # An exception must never escape into the FFI callback frame: it would
+        # skip the terminal bookkeeping below, leaving the future unresolved for
+        # good and the handle registered. The fluent API re-raises this on the
+        # calling thread; a direct native caller gets the traceback here.
+        traceback.print_exc()
+    finally:
+        # Invalidate the non-owning view before anything can resume a waiter,
+        # so no consumer can reach FFI memory that is about to go away.
+        lore_event_ffi._dispose()
 
-    if lore_event.tag == LoreEventTag.COMPLETE and loop is not None and future is not None:
-        loop.call_soon_threadsafe(future.set_result, lore_event.complete.status)
+    if tag == LoreEventTag.COMPLETE:
+        state.status = lore_event.complete.status
+        state.saw_complete = True
+        if state.resolve_on_complete and state.loop is not None and state.future is not None:
+            state.loop.call_soon_threadsafe(_try_set_result, state.future, state.status)
 
-    if lore_event.tag == LoreEventTag.END:
+    if tag == LoreEventTag.END:
         with _handles_lock:
             _handles.pop(handle_id, None)
 
-    lore_event_ffi._dispose()
+        if state.loop is not None and state.future is not None:
+            if state.saw_complete:
+                state.loop.call_soon_threadsafe(
+                    _try_set_result, state.future, state.status
+                )
+            else:
+                state.loop.call_soon_threadsafe(
+                    _try_set_exception,
+                    state.future,
+                    RuntimeError(
+                        "Lore operation ended without emitting a COMPLETE event."
+                    ),
+                )
 
 {% for function_name, function_args in symbols.functions.items() %}
     {% if function_name not in uncommon_functions %}
@@ -65,11 +149,13 @@ def {{ function_name }} (
     with _handles_lock:
         if handle_id in _handles:
             raise RuntimeError(f"Colliding handle id: {handle_id}")
-        _handles[handle_id] = (callback_handle, callback.user_context, None, None)
+        _handles[handle_id] = _LoreCallState(callback_handle, callback.user_context)
 
     internal_callback = _loreffi.new("lore_event_callback_config_t*")
     internal_callback.user_context = handle_id
     internal_callback.func = _internal_event_handler
+    # lorelib dispatches END before this call returns, so the caller resumes
+    # only after its last event.
     return _lore.{{ function_name }}(global_args.as_ptr(), args.as_ptr(), internal_callback[0])
         {% else %}
             {% set args_name = function_args.replace("_async", "").removesuffix("_t") %}
@@ -89,11 +175,25 @@ def {{ function_name }}(
     callback_handle = _loreffi.new_handle(callback.func)
     handle_id = int(_loreffi.cast("uintptr_t", callback_handle))
 
+    # The future resolves at END, the last event lorelib dispatches, so awaiting
+    # it guarantees no event can arrive afterwards. Resolving it on the event
+    # loop also keeps the awaiting continuation off the lorelib worker thread:
+    # that thread must run nothing but the event callback, and a synchronous
+    # Lore call from the continuation would block a thread the native runtime is
+    # driving tasks on.
+    state = _LoreCallState(
+        callback_handle,
+        callback.user_context,
+        loop=loop,
+        future=future,
+        resolve_on_complete={{ "True" if function_name.removesuffix("_async") in registered_callback_functions else "False" }},
+    )
+
     with _handles_lock:
         if handle_id in _handles:
             future.set_exception(RuntimeError(f"Colliding handle id: {handle_id}"))
             return future
-        _handles[handle_id] = (callback_handle, callback.user_context, loop, future)
+        _handles[handle_id] = state
 
     internal_callback = _loreffi.new("lore_event_callback_config_t*")
     internal_callback.user_context = handle_id

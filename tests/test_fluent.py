@@ -1,10 +1,13 @@
 import pytest
 import asyncio
+import threading
+import time
 import uuid
 
 from lore import Lore, LoreError
 from lore.types.args import (
     LoreGlobalArgs,
+    LoreNotificationSubscribeArgs,
     LoreRepositoryCreateArgs,
     LoreRepositoryStatusArgs,
 )
@@ -447,6 +450,158 @@ class TestFluentAPI:
         collect_events = Lore.repository_create(self.global_args, self.args).collect()
         assert any(isinstance(e, LoreCompleteEventData) for e in collect_events)
         assert any(isinstance(e, LoreEndEventData) for e in collect_events)
+
+    # --- END-before-resume tests ---
+
+    # END is the last event lorelib dispatches. The asynchronous terminals
+    # resolve on it rather than on COMPLETE, so no event can still be in flight
+    # when the caller resumes. The synchronous terminals rely on lorelib
+    # returning after its last event, so they are not covered here.
+
+    @pytest.mark.asyncio
+    async def test_wait_async_resumes_only_after_end(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+        tags = []
+
+        def handler(lore_event, _user_context):
+            tag = lore_event.tag
+            time.sleep(0.005)
+            tags.append(tag)
+
+        await Lore.repository_create(self.global_args, self.args).callback(
+            handler
+        ).wait_async()
+
+        assert tags[-1] == LoreEventTag.END
+
+    @pytest.mark.asyncio
+    async def test_collect_async_includes_end_event(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        events = (
+            await Lore.repository_create(self.global_args, self.args)
+            .callback(lambda _lore_event, _user_context: time.sleep(0.005))
+            .collect_async()
+        )
+
+        assert isinstance(events[-1], LoreEndEventData)
+
+    # The future must not be resolved in a way that lets the awaiting
+    # continuation run on the lorelib worker thread that dispatched the event:
+    # that thread runs nothing but the callback, and a synchronous Lore call
+    # from it would block a thread the native runtime is driving tasks on.
+    @pytest.mark.asyncio
+    async def test_async_continuation_does_not_run_on_callback_thread(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+        callback_thread_ids = []
+
+        def handler(_lore_event, _user_context):
+            callback_thread_ids.append(threading.get_ident())
+
+        await Lore.repository_create(self.global_args, self.args).callback(
+            handler
+        ).wait_async()
+
+        assert callback_thread_ids
+        assert threading.get_ident() not in callback_thread_ids
+
+    # A synchronous Lore call is the operation that would fail outright if the
+    # continuation had resumed on a lorelib worker thread.
+    @pytest.mark.asyncio
+    async def test_sync_call_after_await_succeeds(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+        await Lore.repository_create(self.global_args, self.args).wait_async()
+
+        result = Lore.repository_status(
+            self.global_args, LoreRepositoryStatusArgs()
+        ).wait()
+
+        assert result == 0
+
+    # notification_subscribe is the one function whose future resolves on
+    # COMPLETE rather than END, because a live subscription keeps the callback
+    # registered and only dispatches END on unsubscribe. Offline it fails before
+    # any subscription exists, so this covers that resolution path rather than
+    # the early return; exercising a live subscription needs a notification
+    # server.
+    @pytest.mark.asyncio
+    async def test_notification_subscribe_async_fails_without_hanging(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+        Lore.repository_create(self.global_args, self.args).wait()
+
+        subscribe = Lore.notification_subscribe(
+            self.global_args, LoreNotificationSubscribeArgs()
+        ).wait_async()
+
+        with pytest.raises(LoreError) as exc_info:
+            await asyncio.wait_for(subscribe, timeout=30)
+        assert exc_info.value.return_code != 0
+
+    # --- Callback exception tests ---
+
+    # An exception raised by a user callback must not be swallowed by the FFI
+    # callback boundary; it surfaces on the calling thread instead.
+
+    def test_wait_rethrows_callback_exception(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        def handler(_lore_event, _user_context):
+            raise ValueError("callback boom")
+
+        with pytest.raises(ValueError, match="callback boom"):
+            Lore.repository_create(self.global_args, self.args).callback(handler).wait()
+
+    def test_collect_rethrows_callback_exception(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        def handler(_lore_event, _user_context):
+            raise ValueError("callback boom")
+
+        with pytest.raises(ValueError, match="callback boom"):
+            Lore.repository_create(self.global_args, self.args).callback(
+                handler
+            ).collect()
+
+    @pytest.mark.asyncio
+    async def test_wait_async_rethrows_callback_exception(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        def handler(_lore_event, _user_context):
+            raise ValueError("callback boom")
+
+        with pytest.raises(ValueError, match="callback boom"):
+            await Lore.repository_create(self.global_args, self.args).callback(
+                handler
+            ).wait_async()
+
+    @pytest.mark.asyncio
+    async def test_collect_async_rethrows_callback_exception(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        def handler(_lore_event, _user_context):
+            raise ValueError("callback boom")
+
+        with pytest.raises(ValueError, match="callback boom"):
+            await Lore.repository_create(self.global_args, self.args).callback(
+                handler
+            ).collect_async()
+
+    @pytest.mark.asyncio
+    async def test_async_iter_rethrows_callback_exception_and_terminates(
+        self, tmp_path
+    ):
+        self.global_args.repository_path = str(tmp_path)
+
+        def handler(_lore_event, _user_context):
+            raise ValueError("callback boom")
+
+        # A raising callback must still let the iteration finish: END terminates
+        # the queue regardless.
+        with pytest.raises(ValueError, match="callback boom"):
+            async for _event in Lore.repository_create(
+                self.global_args, self.args
+            ).callback(handler).async_iter():
+                pass
 
     @pytest.mark.asyncio
     async def test_multiple_parallel_calls(self, tmp_path):

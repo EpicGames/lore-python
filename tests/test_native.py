@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import tempfile
@@ -273,6 +274,38 @@ class TestLoreRepositoryCommand:
                 event = e.get_data()
                 if isinstance(event, LoreLogEventDataFFI):
                     print(f"e.tag = {event.message}")
+
+    @staticmethod
+    def _raising_handler(_lore_event: LoreEventFFI, _user_context: int):
+        raise ValueError("callback boom")
+
+    # A raising callback must not skip the terminal bookkeeping in the internal
+    # event handler: the future is resolved at END, so losing that step would
+    # leave the caller awaiting for good.
+    def test_raising_callback_does_not_hang_the_sync_call(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        args = LoreRepositoryCreateArgs(repository_url=str(uuid.uuid4()))
+        callback = LoreEventCallbackConfig(
+            func=TestLoreRepositoryCommand._raising_handler
+        )
+        result = lore_repository_create(self.global_args, args, callback)
+
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_raising_callback_does_not_hang_the_async_call(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+
+        args = LoreRepositoryCreateArgs(repository_url=str(uuid.uuid4()))
+        callback = LoreEventCallbackConfig(
+            func=TestLoreRepositoryCommand._raising_handler
+        )
+        result = await asyncio.wait_for(
+            lore_repository_create_async(self.global_args, args, callback), timeout=30
+        )
+
+        assert result == 0
 
     @staticmethod
     def _use_loreeventdataffi_after_callback_handler(

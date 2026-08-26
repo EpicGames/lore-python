@@ -2,24 +2,24 @@
 Copyright Epic Games, Inc. All Rights Reserved.
 
 Type registries used by the Jinja templates. The seed maps below are the
-hand-curated mappings for primitive, scalar, and event-data-array types.
-`build_augmented` extends them with auto-detected entries for every
-`*_array_t` typedef found in `lore.h`, so that adding a new array type to the
-header requires zero edits here or in `utils.ji`.
+hand-curated mappings for primitive and scalar types. `build_augmented`
+extends them with auto-detected entries for every enum, `*_array_t` typedef,
+and event-data struct found in `lore.h`, so that adding a new array type or
+nesting an event-data struct in the header requires zero edits here or in
+`utils.ji`.
 """
 
 from common import util
 
 # Defaults for Python primitive type annotations. Everything else (enums,
-# class wrappers, list[...] forms) is auto-registered by the corresponding
-# loop in `build_augmented` using `setdefault`, so manual entries here are
-# only needed for types no loop covers (primitives, nested-event wrappers).
+# class wrappers, event-data wrappers, list[...] forms) is auto-registered by
+# the corresponding loop in `build_augmented` using `setdefault`, so manual
+# entries here are only needed for types no loop covers (primitives).
 SEED_INIT_MAP = {
     "int": "0",
     "str": "''",
     "bool": "False",
     "bytes": "bytes()",
-    "LoreRevisionSyncProgressEventData": "LoreRevisionSyncProgressEventData()",
 }
 
 
@@ -30,7 +30,6 @@ SEED_DATACLASS_INIT_MAP = {
     "str": "''",
     "bool": "False",
     "bytes": "bytes()",
-    "LoreRevisionSyncProgressEventData": "field(default_factory=LoreRevisionSyncProgressEventData)",
 }
 
 
@@ -40,8 +39,6 @@ SEED_DATACLASS_INIT_MAP = {
 #   - C primitives                            (uint8_t, int32_t, void*, ...)
 #   - Hand-written scalar wrappers             (lore_string_t, lore_hash_t, ...)
 #   - Pointer-to-element / C-array forms       (lore_string_t*, lore_hash_t[])
-#   - Nested-event wrappers (Scenario 3)       (lore_*_event_data_t referenced
-#                                              as a field by another event)
 SEED_PY_MAP = {
     "void*": "bytes",
     "uint8_t": "bool",
@@ -65,7 +62,6 @@ SEED_PY_MAP = {
     "lore_branch_id_t": "bytes",
     "lore_repository_id_t": "bytes",
     "lore_branch_point_t*": "list[LoreBranchPoint]",
-    "lore_revision_sync_progress_event_data_t": "LoreRevisionSyncProgressEventData",
     "lore_bytes_t": "bytes",
     "lore_store_t": "int",
     "lore_node_id_t": "int",
@@ -321,6 +317,21 @@ def build_augmented(visitor):
         dataclass_init_map.setdefault(arr["py_annotation"], "field(default_factory=list)")
         if arr["array_c_type"] not in hardcoded_blit_types:
             hardcoded_blit_types.append(arr["array_c_type"])
+
+    # Event-data structs referenced as a field by another event (e.g.
+    # `lore_link_info_event_data_t.entry` of type
+    # `lore_link_entry_event_data_t`). `events_types.ji` emits a class for
+    # every entry in `visitor.events`, so registering all of them means a
+    # newly-nested event type needs no registry edit.
+    for struct_name in visitor.events:
+        if struct_name.endswith("_array_t"):
+            continue
+        wrapper_class = util.pascal_case(struct_name.removesuffix("_t"))
+        py_map.setdefault(struct_name, wrapper_class)
+        init_map.setdefault(wrapper_class, f"{wrapper_class}()")
+        dataclass_init_map.setdefault(
+            wrapper_class, f"field(default_factory={wrapper_class})"
+        )
 
     # Auto-detect every from_ffi-capable struct type. The seed list folds in
     # hand-written struct-like wrappers that live in `hardcoded_blit_types`

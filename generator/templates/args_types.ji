@@ -9,7 +9,9 @@ This file is generated, do not modify it here, it may be overwritten
 from dataclasses import dataclass, field
 from __future__ import annotations
 from .. import _loreffi
-from .enums import LoreMetadataType
+from .enums import (
+{% for enum_c_type in symbols.enums.keys() %}    {{ pascal_case(enum_c_type.removesuffix("_t")) }},
+{% endfor %})
 from . import LoreHash, LoreString, LoreContext, LoreBranchId, LoreRepositoryId, LorePartition, LoreStore{% for arr in array_types %}, {{ arr.array_class }}{% endfor %}{% for sw in args_used_struct_types %}, {{ pascal_case(sw.removesuffix("_t")) }}{% endfor %}
 
 {% import "utils.ji" as utils %}

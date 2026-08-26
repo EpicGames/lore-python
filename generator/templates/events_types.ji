@@ -17,7 +17,9 @@ from . import (
 {% endfor %}{% for t in events_used_struct_types %}    {{ pascal_case(t.removesuffix("_t")) }},
 {% endfor %}{% for arr in array_types %}    {{ arr.array_class }},
 {% endfor %})
-from .enums import LoreFileAction, LoreLogLevel, LoreBranchLocation, LoreNodeType, LoreEventTag, LoreErrorCode
+from .enums import (
+{% for enum_c_type in symbols.enums.keys() %}    {{ pascal_case(enum_c_type.removesuffix("_t")) }},
+{% endfor %})
 if TYPE_CHECKING:
     from cffi import CData
 

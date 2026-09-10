@@ -96,7 +96,7 @@ class {{ class_name }}FFI:
         r"""{{ "\n        ".join(field.3) }}"""
             {% endif %}
         self._verify_property_access()
-        return {{ return_type }}.from_ffi(self._cdata.{{ field_name }}, {'disposed': False})
+        return {{ return_type }}.from_ffi(self._cdata.{{ field_name }}, self._state)
         {% else %}
     @property
     def {{ field_name }}(self) -> {{ prop_type }}:
@@ -105,7 +105,9 @@ class {{ class_name }}FFI:
             {% endif %}
         self._verify_property_access()
             {% if field_type in from_ffi_scalar_types or field_type in from_ffi_struct_types %}
-        return {{ pascal_case(field_type.removesuffix("_t")) }}.from_ffi(self._cdata.{{ field_name }})
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.from_ffi(self._cdata.{{ field_name }}, self._state)
+            {% elif field_type.endswith("_array_t") and field_type in blit_types %}
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self._cdata.{{ field_name }}, self._state)
             {% elif field_type in blit_types %}
         return {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self._cdata.{{ field_name }})
             {% else %}
@@ -131,6 +133,12 @@ class {{ class_name }}FFI:
                 {% elif field_type in from_ffi_struct_types
                     or field_type.endswith(("event_data_t", "event_data_array_t")) %}
                     {{ field_name }} = self.{{ field_name }}.clone(),
+                {% elif field_type.endswith("_array_t") and field_type.removesuffix("_array_t") + "_t" in from_ffi_struct_types %}
+                    {# The elements are views into the event memory — clone each
+                       so the copy owns its element buffers. #}
+                    {{ field_name }} = [element.clone() for element in self.{{ field_name }}],
+                {% elif field_type.endswith("_array_t") and field_type.removesuffix("_array_t") + "_t" in from_ffi_scalar_types %}
+                    {{ field_name }} = [element.data for element in self.{{ field_name }}],
                 {% else %}
                     {{ field_name }} = self.{{ field_name }},
                 {% endif %}
@@ -194,11 +202,17 @@ class {{ arr.array_class }}FFI:
 
     @staticmethod
     def to_native(cdata) -> list[{{ arr.element_class }}]:
+        {# The element wrappers never escape this call: each one is cloned
+           immediately, so a fresh live state is safe here. #}
         events = []
         for i in range(cdata.{{ arr.count_field }}):
             event = {{ arr.element_class }}FFI.from_ffi(cdata.{{ arr.ptr_field }}[i], {'disposed': False})
             events.append(event.clone())
         return events
+
+    def clone(self) -> list[{{ arr.element_class }}]:
+        self._verify_property_access()
+        return {{ arr.array_class }}FFI.to_native(self._cdata)
 {% endfor %}
 
 {#

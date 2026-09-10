@@ -89,6 +89,7 @@ from lore.types.events import (
     LoreBranchArchiveEventDataFFI,
     LoreBranchCreateEventDataFFI,
     LoreBranchDiffChangeEventDataFFI,
+    LoreCompleteEventDataFFI,
     LoreBranchInfoEventDataFFI,
     LoreBranchListEndEventDataFFI,
     LoreBranchListEntryEventDataFFI,
@@ -333,6 +334,51 @@ class TestLoreRepositoryCommand:
         with pytest.raises(ValueError):
             for e in TestLoreRepositoryCommand._log_events_ffi:
                 print(f"e.tag = {e.message}")
+
+    _error_detail_views: list = []
+
+    @staticmethod
+    def _store_error_subview_handler(lore_event: LoreEventFFI, _user_context: int):
+        data = lore_event.get_data()
+        if isinstance(data, LoreCompleteEventDataFFI):
+            # Store the error sub-view without cloning it. The view decodes
+            # native event memory lazily, so it must become inaccessible once
+            # the callback returns.
+            TestLoreRepositoryCommand._error_detail_views.append(data.error)
+
+    def test_use_subview_after_callback_throws(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+        TestLoreRepositoryCommand._error_detail_views.clear()
+
+        args = LoreRepositoryCreateArgs(repository_url=str(uuid.uuid4()))
+        callback = LoreEventCallbackConfig(
+            func=TestLoreRepositoryCommand._store_error_subview_handler
+        )
+        result = lore_repository_create(self.global_args, args, callback)
+
+        assert result == 0
+        assert TestLoreRepositoryCommand._error_detail_views
+
+        with pytest.raises(ValueError):
+            for error in TestLoreRepositoryCommand._error_detail_views:
+                print(f"error.message = {error.message}")
+
+    def test_clone_subview_after_callback_throws(self, tmp_path):
+        self.global_args.repository_path = str(tmp_path)
+        TestLoreRepositoryCommand._error_detail_views.clear()
+
+        args = LoreRepositoryCreateArgs(repository_url=str(uuid.uuid4()))
+        callback = LoreEventCallbackConfig(
+            func=TestLoreRepositoryCommand._store_error_subview_handler
+        )
+        result = lore_repository_create(self.global_args, args, callback)
+
+        assert result == 0
+        assert TestLoreRepositoryCommand._error_detail_views
+
+        with pytest.raises(ValueError):
+            for error in TestLoreRepositoryCommand._error_detail_views:
+                error.clone()
 
     @staticmethod
     def _use_loreeventdata_after_callback_handler(

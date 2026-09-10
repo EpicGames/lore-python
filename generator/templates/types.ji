@@ -51,8 +51,24 @@ the result is:
             return bytes(buffer).decode("utf-8")
 
 #}
+{# Base for the non-owning views built through `from_ffi`. When the view
+   originates from an event callback, `state` is the event's shared disposal
+   dict: once the callback returns and the event is disposed, any lazy decode
+   through the view raises instead of reading freed native memory. Views built
+   without a state (locally constructed objects own their cdata) are never
+   invalidated. #}
+class _LoreFfiView:
+    _state = None
+
+    def _verify_property_access(self):
+        if self._state is not None and self._state["disposed"]:
+            raise ValueError(
+                f"{type(self).__name__} can be decoded only inside the event callback handler."
+            )
+
+
 @dataclass
-class LoreHash:
+class LoreHash(_LoreFfiView):
     _size = 32
 
     def __init__(self, input_: bytes = bytes()):
@@ -73,19 +89,23 @@ class LoreHash:
         _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
 
     @classmethod
-    def from_ffi(cls, lore_hash: "CData") -> LoreHash:
+    def from_ffi(cls, lore_hash: "CData", state: dict | None = None) -> LoreHash:
         hash = cls.__new__(cls)
         hash.cdata = lore_hash
+        hash._state = state
         return hash
 
     @property
     def data(self) -> bytes:
+        self._verify_property_access()
         return bytes(_loreffi.buffer(self.cdata.data))
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 class LoreBinary:
@@ -126,7 +146,7 @@ class LoreString:
         return bytes(buffer).decode("utf-8")
 
 @dataclass
-class LoreContext:
+class LoreContext(_LoreFfiView):
     _size = 16
 
     def __init__(self, input_: bytes = bytes()):
@@ -147,23 +167,27 @@ class LoreContext:
         _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
 
     @classmethod
-    def from_ffi(cls, lore_context: "CData") -> LoreContext:
+    def from_ffi(cls, lore_context: "CData", state: dict | None = None) -> LoreContext:
         context = cls.__new__(cls)
         context.cdata = lore_context
+        context._state = state
         return context
 
     @property
     def data(self) -> bytes:
+        self._verify_property_access()
         return bytes(_loreffi.buffer(self.cdata.data))
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 @dataclass
-class LorePartition:
+class LorePartition(_LoreFfiView):
     _size = 16
 
     def __init__(self, input_: bytes = bytes()):
@@ -184,23 +208,27 @@ class LorePartition:
         _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
 
     @classmethod
-    def from_ffi(cls, lore_partition: "CData") -> LorePartition:
+    def from_ffi(cls, lore_partition: "CData", state: dict | None = None) -> LorePartition:
         partition = cls.__new__(cls)
         partition.cdata = lore_partition
+        partition._state = state
         return partition
 
     @property
     def data(self) -> bytes:
+        self._verify_property_access()
         return bytes(_loreffi.buffer(self.cdata.data))
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 @dataclass
-class LoreBranchId:
+class LoreBranchId(_LoreFfiView):
     _size = 16
 
     def __init__(self, input_: bytes = bytes()):
@@ -221,23 +249,27 @@ class LoreBranchId:
         _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
 
     @classmethod
-    def from_ffi(cls, lore_branch_id: "CData") -> LoreBranchId:
+    def from_ffi(cls, lore_branch_id: "CData", state: dict | None = None) -> LoreBranchId:
         branch_id = cls.__new__(cls)
         branch_id.cdata = lore_branch_id
+        branch_id._state = state
         return branch_id
 
     @property
     def data(self) -> bytes:
+        self._verify_property_access()
         return bytes(_loreffi.buffer(self.cdata.data))
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 @dataclass
-class LoreRepositoryId:
+class LoreRepositoryId(_LoreFfiView):
     _size = 16
 
     def __init__(self, input_: bytes = bytes()):
@@ -258,19 +290,23 @@ class LoreRepositoryId:
         _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
 
     @classmethod
-    def from_ffi(cls, lore_repository_id: "CData") -> LoreRepositoryId:
+    def from_ffi(cls, lore_repository_id: "CData", state: dict | None = None) -> LoreRepositoryId:
         repository_id = cls.__new__(cls)
         repository_id.cdata = lore_repository_id
+        repository_id._state = state
         return repository_id
 
     @property
     def data(self) -> bytes:
+        self._verify_property_access()
         return bytes(_loreffi.buffer(self.cdata.data))
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 class LoreHashArray:
@@ -288,13 +324,13 @@ class LoreHashArray:
         return self.cdata
 
     @staticmethod
-    def to_native(cdata) -> list[bytes]:
+    def to_native(cdata, state: dict | None = None) -> list[bytes]:
         hashes = []
-        hashes.append(LoreHash.from_ffi(cdata[0]))
-        hashes.append(LoreHash.from_ffi(cdata[1]))
+        hashes.append(LoreHash.from_ffi(cdata[0], state))
+        hashes.append(LoreHash.from_ffi(cdata[1], state))
         return hashes
 
-class LoreInstanceId:
+class LoreInstanceId(_LoreFfiView):
     _size = 16
 
     def __init__(self, input_: bytes = bytes()):
@@ -315,19 +351,23 @@ class LoreInstanceId:
         _loreffi.buffer(self.cdata.data)[:] = input_.ljust(self._size, b"\0")
 
     @classmethod
-    def from_ffi(cls, lore_instance_id: "CData") -> LoreInstanceId:
+    def from_ffi(cls, lore_instance_id: "CData", state: dict | None = None) -> LoreInstanceId:
         instance_id = cls.__new__(cls)
         instance_id.cdata = lore_instance_id
+        instance_id._state = state
         return instance_id
 
     @property
     def data(self) -> bytes:
+        self._verify_property_access()
         return bytes(_loreffi.buffer(self.cdata.data))
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 class LoreBytes:
@@ -347,7 +387,7 @@ class LoreBytes:
     def to_native(cdata) -> bytes:
         return bytes(_loreffi.buffer(cdata.ptr, cdata.len))
 
-class LoreStore:
+class LoreStore(_LoreFfiView):
     INVALID: "LoreStore"
 
     def __init__(self, handle_id: int = 0):
@@ -355,13 +395,15 @@ class LoreStore:
         self.cdata.handle_id = handle_id
 
     @classmethod
-    def from_ffi(cls, lore_store: "CData") -> LoreStore:
+    def from_ffi(cls, lore_store: "CData", state: dict | None = None) -> LoreStore:
         store = cls.__new__(cls)
         store.cdata = lore_store
+        store._state = state
         return store
 
     @property
     def handle_id(self) -> int:
+        self._verify_property_access()
         return self.cdata.handle_id
 
     @staticmethod
@@ -369,9 +411,11 @@ class LoreStore:
         return cdata.handle_id
 
     def as_value(self):
+        self._verify_property_access()
         return self.cdata[0]
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
 LoreStore.INVALID = LoreStore(handle_id=0)
@@ -389,6 +433,10 @@ class {{ arr.array_class }}:
         for i, x in enumerate(self._wrapped):
             self._items[i] = x.as_value()
     {% else %}{# struct #}
+        {# The array memory holds value copies of the element structs, but any
+           buffers those structs point at (e.g. strings) are owned by the
+           element wrappers — keep them alive for the array's lifetime. #}
+        self._wrapped = list(items)
         self._items = _loreffi.new("{{ arr.element_c_type }}[]", len(items))
         for i, item in enumerate(items):
             self._items[i] = item.as_value()
@@ -404,7 +452,7 @@ class {{ arr.array_class }}:
         return self.cdata
 
     @staticmethod
-    def to_native(cdata) -> {{ arr.py_annotation }}:
+    def to_native(cdata, state: dict | None = None) -> {{ arr.py_annotation }}:
     {% if arr.category == "primitive_int" or arr.category == "enum" %}
         return list(_loreffi.unpack(cdata.{{ arr.ptr_field }}, cdata.{{ arr.count_field }}))
     {% elif arr.category == "primitive_bool" %}
@@ -417,8 +465,9 @@ class {{ arr.array_class }}:
         return result
     {% elif arr.category == "native_wrapper" and arr.element_c_type == "lore_instance_id_t" %}
         return [bytes(_loreffi.buffer(cdata.{{ arr.ptr_field }}[i].data)) for i in range(cdata.{{ arr.count_field }})]
-    {% else %}{# struct #}
-        return [{{ arr.element_class }}.from_ffi(cdata.{{ arr.ptr_field }}[i]) for i in range(cdata.{{ arr.count_field }})]
+    {% else %}{# struct — the elements are views into the array memory; thread
+       the disposal state so views escaping an event callback raise on access #}
+        return [{{ arr.element_class }}.from_ffi(cdata.{{ arr.ptr_field }}[i], state) for i in range(cdata.{{ arr.count_field }})]
     {% endif %}
 
 {% endfor %}
@@ -442,7 +491,7 @@ only ever run inside a method body, so the order works one way and not the
 other.
 
 #}
-class LoreMetadata:
+class LoreMetadata(_LoreFfiView):
     r"""A metadata value, tagged by the kind of value it holds.
 
     `tag` names one of `LoreMetadataType` and the member that goes with it is
@@ -529,12 +578,15 @@ class LoreMetadata:
         return cls(LoreMetadataType.BINARY, binary)
 
     @classmethod
-    def from_ffi(cls, lore_metadata: "CData") -> LoreMetadata:
+    def from_ffi(cls, lore_metadata: "CData", state: dict | None = None) -> LoreMetadata:
         metadata = cls.__new__(cls)
         metadata.cdata = lore_metadata
+        metadata._state = state
         return metadata
 
     def __repr__(self) -> str:
+        if self._state is not None and self._state["disposed"]:
+            return "LoreMetadata(disposed)"
         tag = self.cdata.tag
         try:
             return f"LoreMetadata(tag={LoreMetadataType(tag).name})"
@@ -543,37 +595,46 @@ class LoreMetadata:
 
     @property
     def tag(self) -> LoreMetadataType:
+        self._verify_property_access()
         return LoreMetadataType(self.cdata.tag)
 
     @property
     def address(self) -> LoreAddress:
-        return LoreAddress.from_ffi(self.cdata.address)
+        self._verify_property_access()
+        return LoreAddress.from_ffi(self.cdata.address, self._state)
 
     @property
     def boolean(self) -> bool:
+        self._verify_property_access()
         return bool(self.cdata.boolean)
 
     @property
     def binary(self) -> bytes:
+        self._verify_property_access()
         return LoreBinary.to_native(self.cdata.binary)
 
     @property
     def context(self) -> LoreContext:
-        return LoreContext.from_ffi(self.cdata.context)
+        self._verify_property_access()
+        return LoreContext.from_ffi(self.cdata.context, self._state)
 
     @property
     def hash(self) -> LoreHash:
-        return LoreHash.from_ffi(self.cdata.hash)
+        self._verify_property_access()
+        return LoreHash.from_ffi(self.cdata.hash, self._state)
 
     @property
     def numeric(self) -> int:
+        self._verify_property_access()
         return self.cdata.numeric
 
     @property
     def string(self) -> str:
+        self._verify_property_access()
         return LoreString.to_native(self.cdata.string)
 
     def as_value(self):
+        self._verify_property_access()
         # cdata may be a pointer (constructed locally) or a struct value
         # (returned by from_ffi on a field of another type); only the former is indexable.
         if _loreffi.typeof(self.cdata).kind == "pointer":
@@ -581,9 +642,11 @@ class LoreMetadata:
         return self.cdata
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
     def clone(self) -> LoreMetadata:
+        self._verify_property_access()
         new_cdata = _loreffi.new("lore_metadata_t*")
         new_cdata.tag = self.cdata.tag
         tag = self.cdata.tag
@@ -624,7 +687,7 @@ class LoreMetadata:
     {% if struct_name not in hardcoded_blit_types %}
         {% set class_name = pascal_case(struct_name.removesuffix("_t")) %}
 @dataclass
-class {{ class_name }}:
+class {{ class_name }}(_LoreFfiView):
         {% for field in struct_fields %}
             {% set field_type = field.0 %}
             {% set field_name = field.1 %}
@@ -661,9 +724,10 @@ class {{ class_name }}:
     {% set input_param = struct_name.removesuffix("_t") %}
     {% set return_value = input_param.removeprefix("lore_") %}
     @classmethod
-    def from_ffi(cls, {{ input_param }}: "CData") -> {{ class_name }}:
+    def from_ffi(cls, {{ input_param }}: "CData", state: dict | None = None) -> {{ class_name }}:
         {{ return_value }} = cls.__new__(cls)
         {{ return_value }}.cdata = {{ input_param }}
+        {{ return_value }}._state = state
         return {{ return_value }}
 
         {% for field in struct_fields %}
@@ -682,10 +746,16 @@ class {{ class_name }}:
         """
             {% endif %}
             {% if field_type in from_ffi_scalar_types or field_type in from_ffi_struct_types %}
-        return {{ pascal_case(field_type.removesuffix("_t")) }}.from_ffi(self.cdata.{{ field_name }})
+        self._verify_property_access()
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.from_ffi(self.cdata.{{ field_name }}, self._state)
+            {% elif field_type.endswith("_array_t") and field_type in blit_types %}
+        self._verify_property_access()
+        return {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self.cdata.{{ field_name }}, self._state)
             {% elif field_type in blit_types %}
+        self._verify_property_access()
         return {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self.cdata.{{ field_name }})
             {% else %}
+        self._verify_property_access()
         return self.cdata.{{ field_name }}
             {% endif %}
 
@@ -703,6 +773,7 @@ class {{ class_name }}:
         {% endfor %}
 
     def as_value(self):
+        self._verify_property_access()
         # cdata may be a pointer (constructed locally) or a struct value
         # (returned by from_ffi on an array element); only the former is indexable.
         if _loreffi.typeof(self.cdata).kind == "pointer":
@@ -710,9 +781,11 @@ class {{ class_name }}:
         return self.cdata
 
     def as_ptr(self):
+        self._verify_property_access()
         return self.cdata
 
     def clone(self) -> {{ class_name }}:
+        self._verify_property_access()
         return {{ class_name }}(
         {% for field in struct_fields %}
             {% set field_type = field.0 %}
@@ -721,6 +794,12 @@ class {{ class_name }}:
                 {{ field_name }} = self.{{ field_name }}.data,
             {% elif field_type in from_ffi_struct_types %}
                 {{ field_name }} = self.{{ field_name }}.clone(),
+            {% elif field_type.endswith("_array_t") and field_type.removesuffix("_array_t") + "_t" in from_ffi_struct_types %}
+                {# The elements are views into this struct's memory — clone each
+                   so the copy owns its element buffers. #}
+                {{ field_name }} = [element.clone() for element in self.{{ field_name }}],
+            {% elif field_type.endswith("_array_t") and field_type.removesuffix("_array_t") + "_t" in from_ffi_scalar_types %}
+                {{ field_name }} = [element.data for element in self.{{ field_name }}],
             {% elif field_type in blit_types %}
                 {{ field_name }} = {{ pascal_case(field_type.removesuffix("_t")) }}.to_native(self.cdata.{{ field_name }}),
             {% else %}

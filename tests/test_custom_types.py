@@ -1,6 +1,10 @@
+import gc
+
 import pytest
 
 from lore.types import (
+    LoreErrorDetail,
+    LoreTraceLocation,
     LoreAddress,
     LoreBranchDiffNodeData,
     LoreBranchPoint,
@@ -604,3 +608,68 @@ def test_lore_storage_get_item_array_empty():
     arr = LoreStorageGetItemArray()
     assert arr.cdata.count == 0
     assert LoreStorageGetItemArray.to_native(arr.as_ptr()) == []
+
+
+def test_lore_error_detail_owns_trace_location_strings():
+    # The struct-element arrays must keep the element wrappers alive: the
+    # array memory holds value copies of the element structs, but the string
+    # buffers those structs point at are owned by the element wrappers. If the
+    # wrappers are garbage collected, the strings inside the array dangle.
+    detail = LoreErrorDetail(
+        error_code=-1,
+        message="original message",
+        trace_locations=[
+            LoreTraceLocation(
+                file="src/original.rs", line=42, column=7, context="original context"
+            )
+        ],
+    )
+
+    gc.collect()
+    # Reuse any freed cffi buffers so a dangling pointer visibly reads foreign data.
+    junk = [LoreString("x" * 16) for _ in range(64)]
+
+    assert detail.trace_locations[0].file == "src/original.rs"
+    assert detail.trace_locations[0].context == "original context"
+
+    # A clone must own its memory independently of the source.
+    clone = detail.clone()
+    del detail
+    gc.collect()
+    junk += [LoreString("y" * 16) for _ in range(64)]
+
+    assert clone.message == "original message"
+    assert clone.trace_locations[0].file == "src/original.rs"
+    assert clone.trace_locations[0].line == 42
+    assert clone.trace_locations[0].context == "original context"
+
+
+def test_ffi_view_conversion_methods_inaccessible_after_disposal():
+    # as_value()/as_ptr() hand the raw cdata to native calls, so they must
+    # respect the disposal state like the lazy property getters do.
+    state = {"disposed": False}
+    hash_view = LoreHash.from_ffi(_loreffi.new("lore_hash_t*"), state)
+    detail_view = LoreErrorDetail.from_ffi(_loreffi.new("lore_error_detail_t*"), state)
+    metadata_view = LoreMetadata.from_ffi(_loreffi.new("lore_metadata_t*"), state)
+
+    assert hash_view.as_value() is not None
+    assert detail_view.as_ptr() is not None
+
+    state["disposed"] = True
+
+    with pytest.raises(ValueError):
+        hash_view.as_value()
+    with pytest.raises(ValueError):
+        hash_view.as_ptr()
+    with pytest.raises(ValueError):
+        detail_view.as_value()
+    with pytest.raises(ValueError):
+        detail_view.as_ptr()
+    with pytest.raises(ValueError):
+        metadata_view.as_value()
+    with pytest.raises(ValueError):
+        metadata_view.as_ptr()
+
+    # repr() must stay safe on a disposed view (debuggers and log statements
+    # call it implicitly) rather than dereference freed memory or raise.
+    assert "disposed" in repr(metadata_view)

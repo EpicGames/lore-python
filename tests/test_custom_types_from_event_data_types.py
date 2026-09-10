@@ -535,3 +535,39 @@ def test_lore_storage_upload_item_complete_event_data():
     assert isinstance(event.address, LoreAddress)
     assert event.already_durable
     assert event.error_code == LoreErrorCode.NONE
+
+
+def test_event_data_array_ffi_clone():
+    from lore.types.events import LoreRepositoryVerifyFragmentMatchEventDataArrayFFI
+
+    elements = _loreffi.new("lore_repository_verify_fragment_match_event_data_t[1]")
+    elements[0].slot = 3
+    elements[0].index = 7
+    array_cdata = _loreffi.new(
+        "lore_repository_verify_fragment_match_event_data_array_t*"
+    )
+    array_cdata.ptr = elements
+    array_cdata.count = 1
+
+    state = {"disposed": False}
+    array_ffi = LoreRepositoryVerifyFragmentMatchEventDataArrayFFI.from_ffi(
+        array_cdata[0], state
+    )
+
+    cloned = array_ffi.clone()
+    assert len(cloned) == 1
+    assert cloned[0].slot == 3
+    assert cloned[0].index == 7
+
+    # The standalone converter decodes and clones immediately, so it works
+    # without a state.
+    native = LoreRepositoryVerifyFragmentMatchEventDataArrayFFI.to_native(
+        array_cdata[0]
+    )
+    assert len(native) == 1
+    assert native[0].slot == 3
+
+    # After disposal the array contents must no longer be reachable.
+    state["disposed"] = True
+    with pytest.raises(ValueError):
+        array_ffi.clone()

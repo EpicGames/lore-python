@@ -8,7 +8,7 @@ from typing import Callable
 from threading import Lock
 
 from .types.events import LoreEventFFI
-from .types.enums import LoreEventTag
+from .types.enums import LoreEventTag, LoreCompressionMode
 from .types import LoreEventCallbackConfig
 from .types.args import *
 from .native import *
@@ -313,6 +313,14 @@ class Lore:
     @staticmethod
     def set_thread_limit(count: int):
         return lore_set_thread_limit(count)
+
+    @staticmethod
+    def set_compression_mode(mode: LoreCompressionMode):
+        return lore_set_compression_mode(mode)
+
+    @staticmethod
+    def set_compression_level(level: int):
+        return lore_set_compression_level(level)
 
     @staticmethod
     def log_configure(log_config: LoreLogConfig):

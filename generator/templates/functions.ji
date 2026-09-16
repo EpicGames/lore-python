@@ -12,7 +12,7 @@ import traceback
 from . import _loreffi, _lore
 from .types import LoreLogConfig, LoreEventCallbackConfig
 from .types.events import LoreEventFFI
-from .types.enums import LoreEventTag
+from .types.enums import LoreEventTag, LoreCompressionMode
 from .types.args import (
 {% for struct_name, _ in symbols.args.items() %}
     {% set type = pascal_case(struct_name.removesuffix("_t")) %}
@@ -208,6 +208,12 @@ def {{ function_name }}(
 
 def lore_set_thread_limit(count: int):
     return _lore.lore_set_thread_limit(count)
+
+def lore_set_compression_mode(mode: LoreCompressionMode):
+    return _lore.lore_set_compression_mode(mode)
+
+def lore_set_compression_level(level: int):
+    return _lore.lore_set_compression_level(level)
 
 def lore_log_configure(config: LoreLogConfig):
     return _lore.lore_log_configure(config.as_ptr())

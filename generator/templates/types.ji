@@ -387,6 +387,23 @@ class LoreBytes:
     def to_native(cdata) -> bytes:
         return bytes(_loreffi.buffer(cdata.ptr, cdata.len))
 
+class LoreBytesMut:
+    def __init__(self, input_: bytes = bytes()):
+        self.cdata_buffer = _loreffi.new("uint8_t[]", input_)
+        self.cdata = _loreffi.new("lore_bytes_mut_t*")
+        self.cdata.ptr = self.cdata_buffer
+        self.cdata.len = len(input_)
+
+    def as_value(self):
+        return self.cdata[0]
+
+    def as_ptr(self):
+        return self.cdata
+
+    @staticmethod
+    def to_native(cdata) -> bytes:
+        return bytes(_loreffi.buffer(cdata.ptr, cdata.len))
+
 class LoreStore(_LoreFfiView):
     INVALID: "LoreStore"
 

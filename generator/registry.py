@@ -63,6 +63,7 @@ SEED_PY_MAP = {
     "lore_repository_id_t": "bytes",
     "lore_branch_point_t*": "list[LoreBranchPoint]",
     "lore_bytes_t": "bytes",
+    "lore_bytes_mut_t": "bytes",
     "lore_store_t": "int",
     "lore_node_id_t": "int",
 }
@@ -84,6 +85,7 @@ SEED_BLIT_TYPES = [
     "lore_branch_point_t",
     "lore_instance_id_t",
     "lore_bytes_t",
+    "lore_bytes_mut_t",
     "lore_store_t",
 ]
 
@@ -132,6 +134,7 @@ SEED_HARDCODED_BLIT_TYPES = [
     "lore_event_callback_config_t",
     "lore_instance_id_t",
     "lore_bytes_t",
+    "lore_bytes_mut_t",
     "lore_store_t",
 ]
 
@@ -144,6 +147,8 @@ UNCOMMON_FUNCTIONS = [
     "lore_version",
     "lore_user_directory",
     "lore_set_thread_limit",
+    "lore_set_compression_mode",
+    "lore_set_compression_level",
 ]
 
 

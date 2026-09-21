@@ -77,6 +77,22 @@ def _try_set_exception(future, exception):
         future.set_exception(exception)
 
 
+def _post_to_loop(loop, callback, *args):
+    """Schedule `callback` on `loop`, tolerating a loop that is already closed.
+
+    A consumer can abandon an operation - breaking out of async_iter() - and
+    close its event loop while lorelib is still dispatching events on a worker
+    thread. Those events have nowhere left to go, and raising here would escape
+    into the FFI callback frame as an unraisable exception. Catching beats
+    checking is_closed() first: the loop can close between the check and the
+    call.
+    """
+    try:
+        loop.call_soon_threadsafe(callback, *args)
+    except RuntimeError:
+        pass
+
+
 @_loreffi.callback("void(lore_event_t*, uint64_t)")
 def _internal_event_handler(lore_event, handle_id):
     with _handles_lock:
@@ -109,7 +125,7 @@ def _internal_event_handler(lore_event, handle_id):
         state.status = lore_event.complete.status
         state.saw_complete = True
         if state.resolve_on_complete and state.loop is not None and state.future is not None:
-            state.loop.call_soon_threadsafe(_try_set_result, state.future, state.status)
+            _post_to_loop(state.loop, _try_set_result, state.future, state.status)
 
     if tag == LoreEventTag.END:
         with _handles_lock:
@@ -117,11 +133,12 @@ def _internal_event_handler(lore_event, handle_id):
 
         if state.loop is not None and state.future is not None:
             if state.saw_complete:
-                state.loop.call_soon_threadsafe(
-                    _try_set_result, state.future, state.status
+                _post_to_loop(
+                    state.loop, _try_set_result, state.future, state.status
                 )
             else:
-                state.loop.call_soon_threadsafe(
+                _post_to_loop(
+                    state.loop,
                     _try_set_exception,
                     state.future,
                     RuntimeError(

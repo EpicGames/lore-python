@@ -12,6 +12,7 @@ from .types.enums import LoreEventTag, LoreCompressionMode
 from .types import LoreEventCallbackConfig, LoreErrorDetail
 from .types.args import *
 from .native import *
+from .native import _post_to_loop
 
 {% import "utils.ji" as utils %}
 
@@ -134,14 +135,12 @@ class LoreExecutor:
                 self._callback(lore_event, user_context)
 
                 event_cloned = lore_event.get_data().clone()
-                self._event_loop.call_soon_threadsafe(
-                    self._queue.put_nowait, event_cloned
-                )
+                _post_to_loop(self._event_loop, self._queue.put_nowait, event_cloned)
         except Exception as exception:
             self._record_callback_exception(exception)
         finally:
             if tag == LoreEventTag.END and self._event_loop is not None:
-                self._event_loop.call_soon_threadsafe(self._queue.put_nowait, None)
+                _post_to_loop(self._event_loop, self._queue.put_nowait, None)
 
     def _verify_termination(self):
         if self._terminated:

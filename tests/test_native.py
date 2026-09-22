@@ -1121,7 +1121,7 @@ class TestLoreStorageCommand:
             assert result == 0
             assert len(put_completes) == 1
             assert put_completes[0].id == 1
-            assert put_completes[0].error_code == LoreErrorCode.NONE
+            assert put_completes[0].error.error_code == LoreErrorCode.NONE
         finally:
             self._close(handle)
 
@@ -1153,7 +1153,7 @@ class TestLoreStorageCommand:
                 == 0
             )
             assert len(put_completes) == 1
-            assert put_completes[0].error_code == LoreErrorCode.NONE
+            assert put_completes[0].error.error_code == LoreErrorCode.NONE
             stored_address = put_completes[0].address
 
             get_headers: list = []
@@ -1186,7 +1186,7 @@ class TestLoreStorageCommand:
             )
 
             assert len(get_completes) == 1
-            assert get_completes[0].error_code == LoreErrorCode.NONE
+            assert get_completes[0].error.error_code == LoreErrorCode.NONE
             assert len(get_headers) == 1
             assert get_headers[0].size_content == len(payload)
             assert b"".join(get_data_chunks) == payload
@@ -1221,7 +1221,7 @@ class TestLoreStorageCommand:
             )
 
             assert len(get_completes) == 1
-            assert get_completes[0].error_code == LoreErrorCode.ADDRESS_NOT_FOUND
+            assert get_completes[0].error.error_code == LoreErrorCode.ADDRESS_NOT_FOUND
         finally:
             self._close(handle)
 
@@ -1344,7 +1344,7 @@ class TestLoreStorageCommand:
         )
 
         assert result != 0 or all(
-            e.error_code != LoreErrorCode.NONE for e in put_completes
+            e.error.error_code != LoreErrorCode.NONE for e in put_completes
         )
 
     def test_storage_get_invalid_returns_error(self):
@@ -1369,5 +1369,5 @@ class TestLoreStorageCommand:
         )
 
         assert result != 0 or all(
-            e.error_code != LoreErrorCode.NONE for e in get_completes
+            e.error.error_code != LoreErrorCode.NONE for e in get_completes
         )

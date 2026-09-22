@@ -382,7 +382,7 @@ def test_lore_storage_put_item_complete_event_data():
     cdata = _loreffi.new("lore_storage_put_item_complete_event_data_t*")
     cdata.id = 1
     cdata.address = address_cdata[0]
-    cdata.error_code = LoreErrorCode.NONE
+    cdata.error.error_code = LoreErrorCode.NONE
 
     event = LoreStoragePutItemCompleteEventDataFFI.from_ffi(cdata, {"disposed": False})
 
@@ -390,13 +390,13 @@ def test_lore_storage_put_item_complete_event_data():
     assert isinstance(event.address, LoreAddress)
     assert event.address.hash.data == bytes(range(32))
     assert event.address.context.data == bytes(range(16))
-    assert event.error_code == LoreErrorCode.NONE
+    assert event.error.error_code == LoreErrorCode.NONE
 
     cloned = event.clone()
     assert cloned.id == 1
     assert isinstance(cloned.address, LoreAddress)
     assert cloned.address.hash.data == bytes(range(32))
-    assert cloned.error_code == LoreErrorCode.NONE
+    assert cloned.error.error_code == LoreErrorCode.NONE
 
 
 def test_lore_storage_get_header_event_data():
@@ -455,17 +455,17 @@ def test_lore_storage_get_item_complete_event_data():
     cdata = _loreffi.new("lore_storage_get_item_complete_event_data_t*")
     cdata.id = 8
     cdata.address = address_cdata[0]
-    cdata.error_code = LoreErrorCode.ADDRESS_NOT_FOUND
+    cdata.error.error_code = LoreErrorCode.ADDRESS_NOT_FOUND
 
     event = LoreStorageGetItemCompleteEventDataFFI.from_ffi(cdata, {"disposed": False})
 
     assert event.id == 8
     assert isinstance(event.address, LoreAddress)
-    assert event.error_code == LoreErrorCode.ADDRESS_NOT_FOUND
+    assert event.error.error_code == LoreErrorCode.ADDRESS_NOT_FOUND
 
     cloned = event.clone()
     assert cloned.id == 8
-    assert cloned.error_code == LoreErrorCode.ADDRESS_NOT_FOUND
+    assert cloned.error.error_code == LoreErrorCode.ADDRESS_NOT_FOUND
 
 
 def test_lore_storage_copy_item_complete_event_data():
@@ -484,7 +484,7 @@ def test_lore_storage_copy_item_complete_event_data():
     cdata.source_partition = source_partition_cdata[0]
     cdata.target_partition = target_partition_cdata[0]
     cdata.source_address = source_addr_cdata[0]
-    cdata.error_code = LoreErrorCode.NONE
+    cdata.error.error_code = LoreErrorCode.NONE
 
     event = LoreStorageCopyItemCompleteEventDataFFI.from_ffi(cdata, {"disposed": False})
 
@@ -494,7 +494,7 @@ def test_lore_storage_copy_item_complete_event_data():
     assert isinstance(event.target_partition, LorePartition)
     assert event.target_partition.data == target_partition
     assert isinstance(event.source_address, LoreAddress)
-    assert event.error_code == LoreErrorCode.NONE
+    assert event.error.error_code == LoreErrorCode.NONE
 
 
 def test_lore_storage_obliterate_item_complete_event_data():
@@ -505,7 +505,7 @@ def test_lore_storage_obliterate_item_complete_event_data():
     cdata.address = address_cdata[0]
     cdata.local_success = 1
     cdata.remote_success = 0
-    cdata.error_code = LoreErrorCode.INTERNAL
+    cdata.error.error_code = LoreErrorCode.INTERNAL
 
     event = LoreStorageObliterateItemCompleteEventDataFFI.from_ffi(
         cdata, {"disposed": False}
@@ -515,7 +515,7 @@ def test_lore_storage_obliterate_item_complete_event_data():
     assert isinstance(event.address, LoreAddress)
     assert event.local_success
     assert not event.remote_success
-    assert event.error_code == LoreErrorCode.INTERNAL
+    assert event.error.error_code == LoreErrorCode.INTERNAL
 
 
 def test_lore_storage_upload_item_complete_event_data():
@@ -525,7 +525,7 @@ def test_lore_storage_upload_item_complete_event_data():
     cdata.id = 25
     cdata.address = address_cdata[0]
     cdata.already_durable = 1
-    cdata.error_code = LoreErrorCode.NONE
+    cdata.error.error_code = LoreErrorCode.NONE
 
     event = LoreStorageUploadItemCompleteEventDataFFI.from_ffi(
         cdata, {"disposed": False}
@@ -534,7 +534,7 @@ def test_lore_storage_upload_item_complete_event_data():
     assert event.id == 25
     assert isinstance(event.address, LoreAddress)
     assert event.already_durable
-    assert event.error_code == LoreErrorCode.NONE
+    assert event.error.error_code == LoreErrorCode.NONE
 
 
 def test_event_data_array_ffi_clone():

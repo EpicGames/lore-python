@@ -67,9 +67,7 @@ else:
 # Set up general configuration
 LOG_FILE_PATH = "./LoreRepositories"
 REPOSITORY_NAME = "EpicRepo" + str(uuid.uuid4())
-REPOSITORY_URL = (
-    f"{REMOTE_URL}/{REPOSITORY_NAME}" if ONLINE else REPOSITORY_NAME
-)
+REPOSITORY_URL = f"{REMOTE_URL}/{REPOSITORY_NAME}" if ONLINE else REPOSITORY_NAME
 REPOSITORY_PATH = f"./LoreRepositories/{REPOSITORY_NAME}"
 GLOBALS = LoreGlobalArgs(repository_path=REPOSITORY_PATH, offline=not ONLINE)
 LOG_CONFIG = LoreLogConfig(file=True, file_path=LOG_FILE_PATH)

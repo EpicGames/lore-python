@@ -8,6 +8,7 @@ import operator
 
 from pycparser import c_ast
 
+
 def c_div(left, right):
     """Integer division that truncates toward zero, as C does
 

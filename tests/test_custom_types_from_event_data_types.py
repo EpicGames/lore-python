@@ -3,11 +3,11 @@ import pytest
 from lore import _loreffi
 from lore.types import (
     LoreAddress,
-    LoreFragment,
-    LoreMetadata,
-    LoreHash,
-    LoreContext,
     LoreBranchId,
+    LoreContext,
+    LoreFragment,
+    LoreHash,
+    LoreMetadata,
     LorePartition,
     LoreRepositoryId,
 )

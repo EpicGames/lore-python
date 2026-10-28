@@ -10,11 +10,15 @@ from lore.types import (
     LoreBranchId,
     LorePartition,
     LoreRepositoryId,
+    LoreBranchPoint,
+    LoreErrorDetail,
 )
 from lore.types.enums import LoreErrorCode, LoreLogLevel, LoreMetadataType
 from lore.types.events import (
     LoreBranchCreateEventDataFFI,
     LoreBranchLatestListEntryEventDataFFI,
+    LoreBranchListEntryEventDataFFI,
+    LoreCompleteEventDataFFI,
     LoreErrorEventDataFFI,
     LoreFragmentWriteEventDataFFI,
     LoreLogEventDataFFI,
@@ -271,6 +275,80 @@ def test_ffi_event_data_inaccessible_after_disposal():
     # Cloned data should still be accessible
     assert cloned.name == "test"
     assert len(cloned.latest) == 32
+
+
+def test_ffi_event_data_struct_view_is_read_only():
+    message = "Repository not found".encode("utf-8")
+    message_cdata = _loreffi.new("char[]", message)
+
+    cdata = _loreffi.new("lore_complete_event_data_t*")
+    cdata.status = 89
+    cdata.error.error_code = 89
+    cdata.error.message.string = message_cdata
+    cdata.error.message.length = len(message)
+
+    state = {"disposed": False}
+    error = LoreCompleteEventDataFFI.from_ffi(cdata, state).error
+
+    # Assigning any field of a struct view over event memory raises while the
+    # callback runs, whether the field is a scalar, a string or an array
+    with pytest.raises(AttributeError):
+        error.error_code = 1
+    with pytest.raises(AttributeError):
+        error.message = "replaced"
+    with pytest.raises(AttributeError):
+        error.trace_locations = []
+
+    # The rejected assignments left the event struct exactly as lorelib wrote it
+    assert cdata.error.error_code == 89
+    assert cdata.error.message.string == message_cdata
+    assert error.message == "Repository not found"
+
+    # A clone owns its memory and stays writable
+    cloned = error.clone()
+    cloned.message = "replaced"
+    assert cloned.message == "replaced"
+    assert error.message == "Repository not found"
+
+    # After disposal the view still refuses writes, so nothing can land in
+    # released event memory
+    state["disposed"] = True
+    with pytest.raises(AttributeError):
+        error.error_code = 1
+
+
+def test_ffi_event_data_array_element_view_is_read_only():
+    branch_points = _loreffi.new("lore_branch_point_t[1]")
+    _loreffi.buffer(branch_points[0].branch.data)[:] = bytes(range(16))
+
+    cdata = _loreffi.new("lore_branch_list_entry_event_data_t*")
+    cdata.stack.ptr = branch_points
+    cdata.stack.count = 1
+
+    state = {"disposed": False}
+    stack = LoreBranchListEntryEventDataFFI.from_ffi(cdata, state).stack
+
+    # An element of a struct array inside event memory is read-only like the
+    # struct that holds it, and the rejected write leaves the element unchanged
+    with pytest.raises(AttributeError):
+        stack[0].branch = b"\xde\xad\xbe\xef" * 4
+    assert bytes(_loreffi.buffer(branch_points[0].branch.data)) == bytes(range(16))
+
+
+def test_owned_struct_views_stay_writable():
+    # Locally constructed objects own their memory and keep their setters
+    detail = LoreErrorDetail(error_code=1, message="first")
+    detail.error_code = 2
+    detail.message = "second"
+    assert detail.error_code == 2
+    assert detail.message == "second"
+
+    # A view built without an event state wraps memory the caller owns, such as
+    # a struct nested in an argument struct, and stays writable as well
+    cdata = _loreffi.new("lore_branch_point_t*")
+    view = LoreBranchPoint.from_ffi(cdata[0])
+    view.branch = bytes(range(16))
+    assert view.branch.data == bytes(range(16))
 
 
 def test_lore_log_event_data():

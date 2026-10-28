@@ -54,9 +54,12 @@ the result is:
 {# Base for the non-owning views built through `from_ffi`. When the view
    originates from an event callback, `state` is the event's shared disposal
    dict: once the callback returns and the event is disposed, any lazy decode
-   through the view raises instead of reading freed native memory. Views built
-   without a state (locally constructed objects own their cdata) are never
-   invalidated. #}
+   through the view raises instead of reading freed native memory. Such a view
+   is also read-only for its whole life: lorelib owns the event memory and frees
+   the strings and arrays it points to, so a setter writing through it would
+   corrupt the event inside the callback and write into freed memory after it.
+   Views built without a state (locally constructed objects own their cdata) are
+   never invalidated and stay writable. #}
 class _LoreFfiView:
     _state = None
 
@@ -64,6 +67,12 @@ class _LoreFfiView:
         if self._state is not None and self._state["disposed"]:
             raise ValueError(
                 f"{type(self).__name__} can be decoded only inside the event callback handler."
+            )
+
+    def _verify_property_write(self) -> None:
+        if self._state is not None:
+            raise AttributeError(
+                f"{type(self).__name__} is a read-only view of event data; call clone() for a modifiable copy."
             )
 
 
@@ -778,6 +787,7 @@ class {{ class_name }}(_LoreFfiView):
 
     @{{ field_name }}.setter
     def {{ field_name }}(self, value: {{ py_map[field_type] }}):
+        self._verify_property_write()
             {% if field_type in from_ffi_struct_types %}
         self._{{ field_name }} = value
         self.cdata.{{ field_name }} = value.as_value()

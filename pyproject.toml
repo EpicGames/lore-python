@@ -36,3 +36,4 @@ filterwarnings = [
 ]
 log_cli = true
 log_cli_level = "INFO"
+asyncio_default_fixture_loop_scope = "function"

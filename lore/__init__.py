@@ -12,7 +12,6 @@ from pathlib import Path
 
 from cffi import FFI
 
-
 SYSTEM = platform.system().lower()
 MACHINE = platform.machine().lower().replace("x86_64", "amd64")
 

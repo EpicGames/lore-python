@@ -9,12 +9,12 @@ import platform
 import shutil
 import sys
 from pathlib import Path
-import black
-import isort
 
+import black
+import common.visitor
+import isort
 from common.generate import generate_templates
 from registry import build_augmented
-import common.visitor
 
 SYSTEM = platform.system().lower()
 MACHINE = platform.machine().lower().replace("x86_64", "amd64")
